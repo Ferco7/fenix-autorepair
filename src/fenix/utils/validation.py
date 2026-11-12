@@ -8,6 +8,9 @@ def validate_utc_text(value: str) -> str:
         raise ValidationError("El texto UTC no es válido")
     return value
 
+# Alias para que el sistema reconozca utc_text además de validate_utc_text
+utc_text = validate_utc_text
+
 def events_validate(value):
     """Valida los eventos correspondientes."""
     return value
@@ -27,5 +30,6 @@ def strict_event_validation(value):
     if not value or not isinstance(value, str):
         raise ValidationError("El evento no es válido")
     return value
+
 
     
