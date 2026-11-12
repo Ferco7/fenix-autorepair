@@ -21,5 +21,10 @@ def identifier(value: str) -> str:
     if not value or not isinstance(value, str):
         raise ValidationError("El identificador no es válido")
     return value
+    def strict_event_validation(value):
+    """Valida el evento de forma estricta."""
+    if not value or not isinstance(value, str):
+        raise ValidationError("El evento no es válido")
+    return value
 
     
