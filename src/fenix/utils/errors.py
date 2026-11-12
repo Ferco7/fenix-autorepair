@@ -9,3 +9,4 @@ class ValidationError(FenixError):
 class DomainError(FenixError):
     """Excepción lanzada cuando ocurre una violación de las reglas de dominio o inventario."""
     pass
+    
