@@ -1,56 +1,71 @@
-"""Contratos de validación a completar por el integrante 1."""
-import re  # Comprueba el formato de los identificadores.
-from datetime import datetime, timezone  # Trabaja con fechas conscientes de UTC.
-from fenix.utils.errors import ValidationError  # Error público del dominio.
+from datetime import datetime
+from fenix.utils.errors import ValidationError, DomainError
 
+def validate_utc_text(utc_text):
+    """Valida que el texto cumpla con el formato de fecha y hora UTC (ISO 8601)."""
+    if not isinstance(utc_text, str):
+        return False
+    try:
+        datetime.fromisoformat(utc_text.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
 
-def identifier(value: str) -> str:
-    """Valida un identificador corto y devuelve su texto sin modificar.
-
-    Args:
-        value: Texto entre 3 y 32 caracteres; letras minúsculas, dígitos o guion.
-    Returns:
-        El identificador original válido.
-    Raises:
-        ValidationError: Si el tipo o el patrón no cumplen el contrato.
-        NotImplementedError: Mientras el alumno no complete TODO I1-A.
-    Examples:
-        identifier("grupo-01") devuelve "grupo-01"; "../ajeno" debe fallar.
+def events_validate(data):
     """
-    # TODO I1-A: usar isinstance y re.fullmatch con r"[a-z0-9-]{3,32}".
-    # No convertir automáticamente a minúsculas: podría cambiar la identidad.
-    raise NotImplementedError("I1-A: validar identifier")  # Quitar al completar.
-
-
-def ttl_seconds(value: str) -> int:
-    """Valida el TTL didáctico empleado en la opción de entornos efímeros.
-
-    Args:
-        value: Texto con un entero entre 60 y 600 segundos inclusive.
-    Returns:
-        El número entero de segundos.
-    Raises:
-        ValidationError: Si no es entero o está fuera de los límites.
-        NotImplementedError: Mientras no se complete TODO I1-B.
-    Notes:
-        La CLI traduce ValidationError a parser.error para salir con código 2.
+    Valida el identificador, formato UTC y estructura general del dominio.
+    Rechaza listas u objetos incorrectos.
     """
-    # TODO I1-B: convertir con int y capturar ValueError con encadenamiento.
-    # Comprobar 60 <= ttl <= 600; no aceptar decimales ni valores negativos.
-    raise NotImplementedError("I1-B: validar TTL")  # Sustituir por la validación.
+    if not isinstance(data, dict):
+        raise ValidationError("El evento debe ser un objeto JSON válido (diccionario). No se permiten listas.")
+    
+    identifier = data.get("identifier")
+    if not isinstance(identifier, str) or not identifier.strip():
+        raise ValidationError("El campo 'identifier' es obligatorio y debe ser un texto válido.")
+        
+    utc_text = data.get("utc_text")
+    if not validate_utc_text(utc_text):
+        raise ValidationError("El campo 'utc_text' es obligatorio y debe tener un formato UTC válido.")
+        
+    return True
 
-
-def utc_text(value: str) -> datetime:
-    """Interpreta una fecha UTC explícita sin aceptar fechas ingenuas.
-
-    Args:
-        value: ISO 8601 terminado en Z o con offset +00:00.
-    Returns:
-        Fecha con zona UTC; por ejemplo 2026-10-22T18:00:00+00:00.
-    Raises:
-        ValidationError: Si falta zona, hay offset no nulo o formato inválido.
-        NotImplementedError: Mientras no se complete TODO I1-C.
+def strict_event_validation(payload, allowed_event_types, valid_resource_ids):
     """
-    # TODO I1-C: usar fromisoformat, reemplazando Z por +00:00.
-    # Rechazar tzinfo ausente y utcoffset distinto de timedelta(0).
-    raise NotImplementedError("I1-C: interpretar UTC")  # No usar hora local.
+    Realiza una validación estricta:
+    - Rechaza claves extra o ausentes.
+    - Rechaza bool como entero.
+    - Valida event_type y resource_id.
+    - Integra ttl_seconds como práctica del helper.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("Objeto incorrecto: Se esperaba un diccionario JSON.")
+
+    allowed_keys = {"identifier", "utc_text", "event_type", "resource_id", "active_status", "ttl_seconds"}
+    payload_keys = set(payload.keys())
+
+    missing_keys = allowed_keys - payload_keys
+    extra_keys = payload_keys - allowed_keys
+    
+    if missing_keys:
+        raise ValidationError(f"Claves ausentes en el objeto: {missing_keys}")
+    if extra_keys:
+        raise ValidationError(f"Claves extra no permitidas detectadas: {extra_keys}")
+
+    if "active_status" in payload:
+        val = payload["active_status"]
+        if type(val) is not bool:
+            raise ValidationError("El campo 'active_status' debe ser estrictamente de tipo booleano (no entero).")
+
+    event_type = payload.get("event_type")
+    if event_type not in allowed_event_types:
+        raise DomainError(f"El tipo de evento '{event_type}' es desconocido o no permitido.")
+
+    resource_id = payload.get("resource_id")
+    if resource_id not in valid_resource_ids:
+        raise DomainError(f"El resource_id '{resource_id}' es ajeno o no pertenece al inventario autorizado.")
+
+    ttl_seconds = payload.get("ttl_seconds", 3600)
+    if not isinstance(ttl_seconds, int) or ttl_seconds < 0:
+        raise ValidationError("El campo 'ttl_seconds' debe ser un número entero positivo.")
+
+    return True
