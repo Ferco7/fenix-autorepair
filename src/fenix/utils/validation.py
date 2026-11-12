@@ -30,6 +30,3 @@ def strict_event_validation(value):
     if not value or not isinstance(value, str):
         raise ValidationError("El evento no es válido")
     return value
-
-
-    
