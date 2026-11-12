@@ -23,11 +23,15 @@ def ensure_queues(prefix: str) -> tuple[str, str]:
         "MessageRetentionPeriod": "1209600"})["QueueUrl"]  # Retiene 14 días.
     arn = sqs.get_queue_attributes(QueueUrl=dead,
         AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]  # No inventa ARN.
-    # TODO I2-A: crear {prefix}-events con VisibilityTimeout="45" y retención "345600".
-    # Crear RedrivePolicy con json.dumps, deadLetterTargetArn=arn y maxReceiveCount="3".
-    # Usar set_queue_attributes para asegurar la política aunque la cola exista.
-    # Retornar las URLs devueltas por SQS; no construirlas con strings.
-    raise NotImplementedError("I2-A: completar cola principal y RedrivePolicy")
+    policy = json.dumps({"deadLetterTargetArn": arn, "maxReceiveCount": 3})
+    work = sqs.create_queue(QueueName=f"{prefix}-events", Attributes={
+        "VisibilityTimeout": "45",  # Cubre reparación y notificación.
+        "MessageRetentionPeriod": "345600",  # Cuatro días de trabajo.
+        "RedrivePolicy": policy,  # Deriva a la DLQ tras tres recepciones.
+    })["QueueUrl"]  # La URL sale de la respuesta, no se construye a mano.
+    sqs.set_queue_attributes(QueueUrl=work,
+        Attributes={"RedrivePolicy": policy})  # Fuerza la política si ya existía.
+    return work, dead  # Orden acordado: cola de trabajo primero.
 
 
 def queue_url(prefix: str) -> str:
@@ -120,8 +124,9 @@ def retry_later(url: str, message: dict) -> int:
     Side Effects:
         Cambia la visibilidad; RedrivePolicy sigue controlando la DLQ.
     """
-    # TODO I2-B: leer int(message["Attributes"]["ApproximateReceiveCount"]).
-    # Calcular min(30, 2 ** count) y llamar change_message_visibility.
-    # Pasar el ReceiptHandle actual; retornar segundos para registrarlos.
-    # Nunca send_message aquí: una copia reiniciaría la cuenta de recepciones.
-    raise NotImplementedError("I2-B: programar backoff con visibilidad")
+    count = int(message["Attributes"]["ApproximateReceiveCount"])  # Cuenta de SQS.
+    seconds = min(30, 2 ** count)  # 2, 4, 8... con tope de 30 segundos.
+    client("sqs").change_message_visibility(  # Reutiliza la misma entrega.
+        QueueUrl=url, ReceiptHandle=message["ReceiptHandle"],
+        VisibilityTimeout=seconds)  # No crea una copia del mensaje.
+    return seconds  # El worker lo registra en el contexto del mensaje.
