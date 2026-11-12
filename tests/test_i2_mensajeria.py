@@ -1,10 +1,13 @@
 """Pruebas del rol I2: colas idempotentes, DLQ y backoff sin reenvío."""
 import json  # Verifica la política de redrive serializada.
+import time  # Espera acotada durante la limpieza de recursos.
 import uuid  # Genera un prefijo exclusivo para la prueba de integración.
 import warnings  # Hace visible una limpieza incompleta, sin ocultarla.
 import pytest  # Parametriza el backoff y marca la prueba de integración.
 from botocore.exceptions import ClientError
+from fenix.services import demo as demo_module
 from fenix.services import sqs as sqs_module
+from fenix.utils.errors import PermanentError
 
 
 class FakeSQS:
@@ -185,3 +188,142 @@ def test_ensure_queues_against_localstack():
                         f"No se pudo limpiar la cola de prueba {url}: {error}",
                         stacklevel=1,
                     )
+
+
+@pytest.mark.pendiente
+def test_setup_demo_rejects_inventory_from_another_group(tmp_path, monkeypatch):
+    """No reutiliza un inventario que pertenece a otro grupo.
+
+    Args:
+        tmp_path: Archivo temporal para el inventario.
+        monkeypatch: Sustituye la ruta y la validación de I1.
+
+    Returns:
+        None si el conflicto se detecta antes de tocar el emulador.
+    Raises:
+        AssertionError: Si el inventario ajeno se acepta.
+    """
+    path = tmp_path / "inventory.json"
+    path.write_text(json.dumps({"_lab": {"group": "otro-grupo"}}), encoding="utf-8")
+    monkeypatch.setattr(demo_module, "INVENTORY_PATH", str(path))
+    monkeypatch.setattr(demo_module, "identifier", lambda value: value)
+
+    with pytest.raises(PermanentError):
+        demo_module.setup_demo("grupo-01")
+
+
+def _cleanup_lab(ec2, s3, inventory: dict) -> None:
+    """Elimina los recursos del ensayo sin ocultar una limpieza incompleta.
+
+    Args:
+        ec2: Cliente EC2 usado por el ensayo.
+        s3: Cliente S3 usado por el ensayo.
+        inventory: Inventario con los IDs reales a eliminar.
+
+    Returns:
+        None.
+    Side Effects:
+        Termina la instancia, borra el SG y el bucket; avisa si algo falla.
+    """
+    instance_id = inventory.get("node-01", {}).get("id")
+    if instance_id:
+        try:
+            ec2.terminate_instances(InstanceIds=[instance_id])
+            for _ in range(20):
+                state = ec2.describe_instances(InstanceIds=[instance_id])[
+                    "Reservations"][0]["Instances"][0]["State"]["Name"]
+                if state == "terminated":
+                    break
+                time.sleep(1)
+        except ClientError as error:
+            warnings.warn(
+                f"No se pudo terminar la instancia {instance_id}: {error}",
+                stacklevel=1,
+            )
+
+    security_group_id = inventory.get("_lab", {}).get("security_group_id")
+    if security_group_id:
+        for _ in range(10):
+            try:
+                ec2.delete_security_group(GroupId=security_group_id)
+                break
+            except ClientError:
+                time.sleep(1)
+        else:
+            warnings.warn(
+                f"No se pudo eliminar el SG {security_group_id}",
+                stacklevel=1,
+            )
+
+    bucket_id = inventory.get("bucket-01", {}).get("id")
+    if bucket_id:
+        try:
+            s3.delete_bucket(Bucket=bucket_id)
+        except ClientError as error:
+            warnings.warn(
+                f"No se pudo eliminar el bucket {bucket_id}: {error}",
+                stacklevel=1,
+            )
+
+
+@pytest.mark.integracion
+def test_setup_demo_is_idempotent_against_localstack(tmp_path, monkeypatch):
+    """Repite setup-demo y conserva los IDs reales de instancia, SG y bucket.
+
+    Args:
+        tmp_path: Archivo temporal para no tocar el inventario del grupo.
+        monkeypatch: Sustituye la ruta y la validación de I1.
+
+    Returns:
+        None si la segunda corrida reutiliza los mismos recursos y etiquetas.
+    Raises:
+        AssertionError: Si se duplican recursos o faltan etiquetas.
+        ClientError: Si LocalStack rechaza una operación.
+    Side Effects:
+        Crea recursos con un grupo único y los elimina al finalizar.
+    """
+    group = f"i2-{uuid.uuid4().hex[:8]}"
+    path = tmp_path / "inventory.json"
+    monkeypatch.setattr(demo_module, "INVENTORY_PATH", str(path))
+    monkeypatch.setattr(demo_module, "identifier", lambda value: value)
+
+    ec2 = demo_module.client("ec2")
+    s3 = demo_module.client("s3")
+    inventory = {}
+    try:
+        first = demo_module.setup_demo(group)
+        second = demo_module.setup_demo(group)
+        inventory = second
+
+        assert first["node-01"]["id"] == second["node-01"]["id"]
+        assert first["bucket-01"]["id"] == second["bucket-01"]["id"]
+        assert (first["_lab"]["security_group_id"]
+                == second["_lab"]["security_group_id"])
+        assert second["node-01"]["type"] == "ec2"
+        assert second["bucket-01"]["type"] == "s3"
+        assert second["node-01"]["tags"]["ManagedBy"] == "ppa2"
+        assert second["bucket-01"]["tags"]["Owner"] == group
+        assert second["_lab"]["vpc_id"].startswith("vpc-")
+        assert second["_lab"]["image_id"].startswith("ami-")
+        assert json.loads(path.read_text(encoding="utf-8")) == second
+
+        node_tags = {
+            tag["Key"]: tag["Value"]
+            for tag in ec2.describe_tags(
+                Filters=[{"Name": "resource-id",
+                          "Values": [second["node-01"]["id"]]}]
+            )["Tags"]
+        }
+        assert {"ManagedBy", "Project", "GroupId", "Owner"} <= node_tags.keys()
+
+        bucket_tags = {
+            tag["Key"]: tag["Value"]
+            for tag in s3.get_bucket_tagging(
+                Bucket=second["bucket-01"]["id"])["TagSet"]
+        }
+        assert bucket_tags["ManagedBy"] == "ppa2"
+        assert bucket_tags["Owner"] == group
+    finally:
+        if path.exists():
+            inventory = json.loads(path.read_text(encoding="utf-8"))
+        _cleanup_lab(ec2, s3, inventory)
