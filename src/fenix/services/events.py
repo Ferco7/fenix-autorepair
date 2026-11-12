@@ -1,28 +1,21 @@
-"""Contrato de eventos de autorreparación; integrante 1."""
-from fenix.utils.errors import ValidationError
-from fenix.utils.validation import identifier, utc_text
+from fenix.utils.validation import events_validate, strict_event_validation
+from fenix.utils.errors import ValidationError, DomainError
 
-
-def validate(event: dict, inventory: dict) -> dict:
-    """Valida esquema cerrado y resuelve exclusivamente aliases autorizados.
-
-    Args:
-        event: JSON objeto con schema_version, event_id, event_type, resource_id,
-            occurred_at y simulate_failures.
-        inventory: Mapa alias -> recurso, preparado por setup-demo y revisado por el grupo.
-    Returns:
-        Copia validada del evento; no modifica inventory.
-    Raises:
-        ValidationError: Tipo, campo, timestamp o recurso no permitido.
-        NotImplementedError: Mientras no se complete TODO I1-D.
-    Notes:
-        event_type solo permite instance.stopped y bucket.tags_missing.
-        simulate_failures solo es de laboratorio: entero de 0 a 5, excluyendo bool.
+def process_incoming_event(raw_event, inventory_database):
     """
-    # TODO I1-D: exigir dict, campos exactos y schema_version entero igual a 1.
-    # Aplicar identifier a event_id/resource_id y utc_text a occurred_at.
-    # Exigir resource_id en inventory; no aceptar ARN/InstanceId desde la petición.
-    # Comprobar que el tipo del evento coincide con el tipo del recurso del inventario.
-    # Rechazar bool como entero: type(value) is int en schema_version/simulate_failures.
-    # Guardar el contenido asociado a event_id; el mismo ID con distinto evento es conflicto.
-    raise NotImplementedError("I1-D: validar contrato del evento Fénix")
+    Función del servicio de eventos para Integrante 1.
+    Entradas: raw_event (evento recibido), inventory_database (inventario permitido).
+    Salida: Copia validada del evento o lanza una excepción si hay errores.
+    """
+    allowed_types = {"CREATE", "UPDATE", "DELETE", "SYNC"}
+    
+    try:
+        events_validate(raw_event)
+        strict_event_validation(raw_event, allowed_types, inventory_database)
+        
+        validated_copy = dict(raw_event)
+        validated_copy["validation_status"] = "APPROVED"
+        return validated_copy
+
+    except (ValidationError, DomainError) as e:
+        raise ValidationError(f"Fallo de validación de entrada - Evento descartado localmente: {str(e)}")
