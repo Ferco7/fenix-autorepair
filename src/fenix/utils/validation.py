@@ -10,3 +10,4 @@ def validate_utc_text(value: str) -> str:
 def events_validate(value):
     """Valida los eventos correspondientes."""
     return value
+    
