@@ -1,0 +1,36 @@
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Tests y herramientas
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Runtime (se regenera en cada corrida)
+data/
+logs/
+*.log
+*.log.*
+*.gz
+
+# LocalStack (solo si se agrega un volumen persistente)
+localstack_data/
+
+# Sistema e IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

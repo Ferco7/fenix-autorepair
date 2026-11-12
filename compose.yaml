@@ -1,0 +1,19 @@
+# Preferir la imagen ya validada por la cátedra; no utilizar latest.
+services:
+  localstack:
+    image: ${LOCALSTACK_IMAGE:?Definir imagen aprobada en .env}
+    container_name: fenix-localstack
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      EC2_VM_MANAGER: mock
+      SERVICES: sqs,s3,ec2
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+# Python se ejecuta en el host. No se montan credenciales AWS ni socket Docker.

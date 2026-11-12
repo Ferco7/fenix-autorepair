@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  base:
+    name: Base + configuración
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Instalar paquete
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Tests base
+        run: python -m pytest -m base -q
+
+      - name: Validar compose
+        run: |
+          cp .env.example .env
+          docker compose config > /dev/null
+
+      - name: Diagnóstico del entorno
+        env:
+          WEBHOOK_SECRET: ci-secret-0123456789abcdef
+        run: python scripts/doctor.py
