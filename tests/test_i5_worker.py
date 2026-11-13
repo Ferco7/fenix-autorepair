@@ -28,8 +28,9 @@ class FakeLogger:
 
 INVENTORY = {
     "_lab": {"group": "grupo01"},
-    "node-01": {"type": "ec2", "id": "i-1", "tags": {}},
-    "bucket-01": {"type": "s3", "id": "b-1", "tags": {}},
+    "node-01": {"type": "ec2", "id": "i-1", "security_group_id": "sg-1",
+                "expected_tags": {}},
+    "bucket-01": {"type": "s3", "id": "b-1", "expected_tags": {}},
 }
 EVENT = {
     "schema_version": 1,
@@ -46,6 +47,7 @@ MESSAGE = {"MessageId": "m-1", "ReceiptHandle": "r-1",
 def test_run_confirma_despues_del_handler(monkeypatch):
     """El ACK ocurre después de que el handler termina."""
     calls = []
+    logger = FakeLogger()
     monkeypatch.setattr(worker, "receive", lambda url: [dict(MESSAGE)])
     monkeypatch.setattr(worker, "acknowledge",
                         lambda url, receipt: calls.append(("ack", receipt)))
@@ -55,8 +57,13 @@ def test_run_confirma_despues_del_handler(monkeypatch):
     def handler(event):
         calls.append(("handler", event["event_id"]))
 
-    worker.run("url", handler, FakeLogger(), once=True)
+    worker.run("url", handler, logger, once=True)
     assert calls == [("handler", "evt-001"), ("ack", "r-1")]
+    confirmado = logger.rows[-1][2]
+    assert confirmado["event_id"] == "evt-001"
+    assert confirmado["resource_id"] == "node-01"
+    assert confirmado["action"] == "instance.stopped"
+    assert confirmado["attempt"] is None
 
 
 def test_run_no_confirma_si_el_handler_falla(monkeypatch):
@@ -127,6 +134,27 @@ def test_run_sin_retry_si_falla_el_ack(monkeypatch):
 
     worker.run("url", lambda event: None, FakeLogger(), once=True)
     assert calls == []
+
+
+def test_run_logs_incluyen_contexto_del_evento(monkeypatch):
+    """§4.2: event_id, resource_id, action y attempt quedan en la línea JSON."""
+    logger = FakeLogger()
+    message = dict(MESSAGE, Attributes={"ApproximateReceiveCount": "2"})
+    monkeypatch.setattr(worker, "receive", lambda url: [message])
+    monkeypatch.setattr(worker, "retry_later", lambda url, message: 4)
+
+    def handler(event):
+        raise RetryableError("falla simulada")
+
+    worker.run("url", handler, logger, once=True)
+    _, nombre, extra = logger.rows[0]
+    assert nombre == "mensaje_reintentable"
+    assert extra["event_id"] == "evt-001"
+    assert extra["resource_id"] == "node-01"
+    assert extra["action"] == "instance.stopped"
+    assert extra["attempt"] == 2
+    assert extra["message_id"] == "m-1"
+    assert extra["status"] == "RetryableError"
 
 
 def preparar(tmp_path, monkeypatch):
@@ -218,6 +246,37 @@ def test_handle_rechaza_event_id_reutilizado(tmp_path, monkeypatch):
     otro = dict(EVENT, event_type="bucket.tags_missing", resource_id="bucket-01")
     with pytest.raises(PermanentError):
         remediation.handle(otro)
+
+
+def test_handle_registra_conflicto_sin_cambiar_el_original(tmp_path, monkeypatch):
+    """F15: el conflicto queda registrado y el primer registro no se altera."""
+    preparar(tmp_path, monkeypatch)
+    calls = {"repair": 0, "notify": 0}
+
+    def fake_repair(resource, event_type):
+        calls["repair"] += 1
+        return "repaired"
+
+    def fake_notify(text):
+        calls["notify"] += 1
+
+    monkeypatch.setattr(remediation, "repair", fake_repair)
+    monkeypatch.setattr(remediation, "notify", fake_notify)
+
+    remediation.handle(dict(EVENT))
+    original = load("data/events.json")["evt-001"]
+
+    otro = dict(EVENT, event_type="bucket.tags_missing", resource_id="bucket-01")
+    with pytest.raises(PermanentError):
+        remediation.handle(otro)
+
+    ledger = load("data/events.json")
+    assert ledger["evt-001"] == original
+    conflictos = ledger["_conflicts"]["evt-001"]
+    assert len(conflictos) == 1
+    assert conflictos[0]["status"] == "conflict"
+    assert conflictos[0]["resource_id"] == "bucket-01"
+    assert calls == {"repair": 1, "notify": 1}
 
 
 def test_handle_preserva_otros_eventos(tmp_path, monkeypatch):
