@@ -1,9 +1,13 @@
 """Acciones convergentes a completar por integrante 3 y coordinadas por 5."""
+import json 
 from fenix.config.settings import client
 from fenix.utils.state import load, save
 from fenix.services.events import validate
 from fenix.services.notifications import notify
 from fenix.utils.errors import RetryableError, PermanentError
+
+INVENTORY_PATH = "data/inventory.json"
+LEDGER_PATH = "data/events.json"
 
 
 def repair(resource: dict, event_type: str) -> str:
@@ -35,29 +39,40 @@ def repair(resource: dict, event_type: str) -> str:
 
 
 def handle(event: dict) -> None:
-    """Completa reparación y notificación usando un registro durable por evento.
+    """Completa reparación y notificación usando un registro durable por evento."""
+    inventory = load(INVENTORY_PATH)
+    validated = validate(event, inventory)
+    event_id = validated["event_id"]
+    content = json.dumps(validated, sort_keys=True, ensure_ascii=False)
 
-    Args:
-        event: Objeto recibido de SQS, que se vuelve a validar aquí.
-    Returns:
-        None solo cuando reparación y aviso quedaron registrados como exitosos.
-    Raises:
-        ValidationError: Si el evento fue inyectado directamente a SQS y no es válido.
-        RetryableError: Si la simulación o una dependencia temporal falla.
-        PermanentError: Conflicto de event_id o recurso no autorizado.
-        NotImplementedError: Mientras falte TODO I5-B.
-    Side Effects:
-        Actualiza recursos, data/events.json y el canal de comunicación.
-    Notes:
-        Un solo proceso modifica el ledger. Un timeout al notificar puede repetir
-        un aviso: no existe una transacción común entre JSON, AWS y Telegram/Slack.
-    """
-    # TODO I5-B: cargar inventario y validar; cargar ledger por event_id.
-    # Vincular event_id al contenido del evento; rechazar reutilización con otro contenido.
-    # Guardar attempts incrementado antes de simular fallas; persiste entre reinicios.
-    # Si attempts <= simulate_failures, lanzar RetryableError sin modificar recursos.
-    # Si repair_done es falso: repair; guardar resultado y repair_done=True.
-    # Si notified es falso: notify resumen; guardar notified=True después del éxito.
-    # Si ambas etapas ya estaban completas, retornar sin efectos repetidos.
-    # Cada save debe preservar el resto del ledger; no sobrescribir otros eventos.
-    raise NotImplementedError("I5-B: integrar etapas y ledger durable")
+    ledger = load(LEDGER_PATH)  
+    record = ledger.get(event_id)  
+    
+    if record is not None:  
+        if record.get("content") != content:  
+            raise PermanentError("event_id reutilizado con otro contenido")  
+        if record.get("repair_done") and record.get("notified"):  
+            return  # Nada pendiente: no repetir acciones ya verificadas.  
+    else:  
+        record = {"content": content, "attempts": 0,  
+                  "repair_done": False, "notified": False}  
+        ledger[event_id] = record  
+
+    record["attempts"] += 1  
+    save(LEDGER_PATH, ledger)  
+
+    if record["attempts"] <= validated["simulate_failures"]:  
+        raise RetryableError("Falla simulada pendiente de reintento")  
+
+    resource = inventory[validated["resource_id"]]  
+
+    if not record.get("repair_done"):  
+        record["result"] = repair(resource, validated["event_type"])  
+        record["repair_done"] = True  
+        save(LEDGER_PATH, ledger)  
+
+    if not record.get("notified"):  
+        notify(f"Evento {event_id}: {validated['event_type']} en "  
+               f"{validated['resource_id']} -> {record.get('result', 'sin cambios')}")  
+        record["notified"] = True  
+        save(LEDGER_PATH, ledger)
