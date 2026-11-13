@@ -135,4 +135,5 @@ buckets: ['fenix-grupo01-demo']
 - La clave reservada `_lab` guarda metadatos del laboratorio. Los aliases
   `node-01` y `bucket-01` son los únicos recursos autorizados del inventario.
 - `data/inventory.json` es estado de runtime y está en `.gitignore`.
-- F09 y F10 quedan pendientes hasta que I5 implemente el worker.
+- F09 y F10 quedan pendientes de I3 (`repair`) e I4 (`notify`); el worker de
+  I5 ya está mergeado en `main`.
