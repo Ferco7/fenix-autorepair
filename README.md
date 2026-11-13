@@ -177,7 +177,7 @@ python -m fenix.cli send examples/node-event.json
 
 | ID | Caso | Preparación | Resultado esperado | Resultado obtenido | Evidencia | Responsable | Fecha |
 |---|---|---|---|---|---|---|---|
-| F01 | init-queues/setup-demo x2 | _Completar_ | Mismas colas/recursos; sin duplicados | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F01 | init-queues/setup-demo x2 | `init-queues` x2 + `setup-demo` x2 | Mismas colas/recursos; sin duplicados | Mismas URLs de cola; mismo `InstanceId`, SG y bucket; 0 duplicados | [`evidence/F01-init-queues-idempotente.md`](evidence/F01-init-queues-idempotente.md) | I2 | 2026-11-12 |
 | F02 | Nodo detenido → alerta válida | _Completar_ | Running verificado, ledger completo, aviso y ACK | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F03 | Bucket sin tag Owner | _Completar_ | Tags restauradas; ajenas preservadas | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F04 | Firma ausente/alterada/timestamp viejo | _Completar_ | 401; ningún mensaje nuevo | _Completar_ | _Completar_ | _Completar_ | _Completar_ |

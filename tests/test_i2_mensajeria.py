@@ -297,12 +297,19 @@ def test_setup_demo_is_idempotent_against_localstack(tmp_path, monkeypatch):
 
         assert first["node-01"]["id"] == second["node-01"]["id"]
         assert first["bucket-01"]["id"] == second["bucket-01"]["id"]
-        assert (first["_lab"]["security_group_id"]
+        assert (first["node-01"]["security_group_id"]
+                == second["node-01"]["security_group_id"])
+        assert (second["node-01"]["security_group_id"]
                 == second["_lab"]["security_group_id"])
         assert second["node-01"]["type"] == "ec2"
         assert second["bucket-01"]["type"] == "s3"
-        assert second["node-01"]["tags"]["ManagedBy"] == "ppa2"
-        assert second["bucket-01"]["tags"]["Owner"] == group
+        assert set(second["node-01"]) == {
+            "type", "id", "security_group_id", "expected_tags"}
+        assert set(second["bucket-01"]) == {"type", "id", "expected_tags"}
+        assert second["node-01"]["expected_tags"]["ManagedBy"] == "ppa2"
+        assert second["bucket-01"]["expected_tags"]["Owner"] == group
+        assert (second["node-01"]["expected_tags"]
+                == second["bucket-01"]["expected_tags"])
         assert second["_lab"]["vpc_id"].startswith("vpc-")
         assert second["_lab"]["image_id"].startswith("ami-")
         assert json.loads(path.read_text(encoding="utf-8")) == second
