@@ -1,4 +1,4 @@
-"""Plantilla central de integración: un worker, un mensaje por vez."""
+"""Worker central: un mensaje por vez y ACK solo tras el éxito durable."""
 import json  # Convierte Body solo dentro del control por mensaje.
 import time  # Evita un bucle intensivo si el emulador no responde.
 from botocore.exceptions import BotoCoreError, ClientError
@@ -11,28 +11,77 @@ def run(url: str, handler, logger, once: bool = False) -> None:
 
     Args:
         url: URL de la cola de trabajo, obtenida por get_queue_url.
-        handler: Callable handler(event) que revalida y ejecuta el caso de negocio.
+        handler: Callable handler(event) que revalida y ejecuta el negocio.
         logger: Logger JSON del proceso worker.
         once: Si es True, realiza una sola consulta y termina; útil para pruebas.
     Returns:
         None al terminar la consulta única o al detenerse mediante Ctrl+C.
     Raises:
-        NotImplementedError: Si todavía no se completaron las plantillas del alumno.
+        NotImplementedError: Si todavía falta una plantilla del equipo.
     Side Effects:
-        Recibe mensajes, ejecuta el handler y cambia o confirma su recepción.
+        Consume, reprograma o confirma mensajes; nunca confirma en finally.
     Notes:
-        Completar I5-A antes de usar. El parseo debe ocurrir por mensaje para que
-        un JSON corrupto no termine el worker ni oculte los otros mensajes.
+        Los logs incluyen event_id, resource_id, action y attempt cuando el
+        mensaje se pudo parsear; el formateador completa el resto con null.
     """
-    # TODO I5-A: implementar el algoritmo de la sección 4 de la consigna.
-    # 1. Abrir un bucle; receive(url) queda en un try para fallos de transporte.
-    # 2. Para cada mensaje, definir el contexto message_id antes de json.loads.
-    # 3. Dentro del try por mensaje: decodificar JSON, exigir dict y llamar handler.
-    # 4. acknowledge solo si handler terminó y persistió todos sus pasos.
-    # 5. JSON/validación/negocio/red: registrar tipo seguro y llamar retry_later.
-    # 6. Un fallo del ACK también deja el evento disponible; handler es idempotente.
-    # 7. Nunca ACK en finally, ni borrar antes de notificar/persistir resultado.
-    # 8. Fallos del transporte o de retry_later: registrar y volver tras 2 segundos.
-    # 9. once termina tras una consulta; Ctrl+C sale y el main cierra el listener.
-    # 10. Los NotImplementedError deben propagarse: revelan que falta completar.
-    raise NotImplementedError("I5-A: implementar ciclo de vida del worker")
+    while True:
+        try:
+            messages = receive(url)
+        except (BotoCoreError, ClientError) as error:
+            logger.error("fallo_transporte",
+                         extra={"status": type(error).__name__})
+            if once:
+                return
+            time.sleep(2)
+            continue
+
+        for message in messages:
+            message_id = message.get("MessageId")  # Contexto antes de parsear.
+            raw_attempt = message.get("Attributes", {}).get("ApproximateReceiveCount")
+            try:
+                # Entregas de este mensaje SQS; no confundir con el ledger.
+                attempt = int(raw_attempt) if raw_attempt is not None else None
+            except (TypeError, ValueError):
+                attempt = None  # Un atributo raro no debe tumbar el worker.
+            context = {"message_id": message_id, "attempt": attempt}
+            try:
+                event = json.loads(message.get("Body", ""))
+                if not isinstance(event, dict):
+                    raise ValueError("El cuerpo del mensaje no es un objeto JSON")
+                context.update({
+                    "event_id": event.get("event_id"),
+                    "resource_id": event.get("resource_id"),
+                    "action": event.get("event_type"),
+                })
+                handler(event)
+            except NotImplementedError:
+                raise  # Una plantilla pendiente debe verse, nunca confirmarse.
+            except (ValueError, TypeError, KeyError, ProjectError,
+                    BotoCoreError, ClientError, OSError) as error:
+                logger.error("mensaje_reintentable",
+                             extra={**context, "status": type(error).__name__})
+                try:
+                    retry_later(url, message)
+                except (BotoCoreError, ClientError, KeyError) as retry_error:
+                    logger.error("fallo_retry",
+                                 extra={**context,
+                                        "status": type(retry_error).__name__})
+                    if once:
+                        return
+                    time.sleep(2)
+                continue
+
+            try:
+                acknowledge(url, message["ReceiptHandle"])
+            except (BotoCoreError, ClientError, KeyError) as error:
+                logger.error("fallo_ack",
+                             extra={**context, "status": type(error).__name__})
+                if once:
+                    return
+                time.sleep(2)
+            else:
+                logger.info("mensaje_confirmado",
+                            extra={**context, "status": "ok"})
+
+        if once:
+            return

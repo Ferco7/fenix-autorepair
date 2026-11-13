@@ -1,10 +1,15 @@
 """Acciones convergentes a completar por integrante 3 y coordinadas por 5."""
-from botocore.exceptions import BotoCoreError, ClientError
+import json  #vincula cada event_id con el contenido exacto recibido
+from datetime import datetime,timezone #Marca UTC del conflicto registrado
 from fenix.config.settings import client
 from fenix.utils.state import load, save
 from fenix.services.events import validate
 from fenix.services.notifications import notify
 from fenix.utils.errors import RetryableError, PermanentError
+from botocore.exceptions import BotoCoreError, ClientError
+
+INVENTORY_PATH = "data/inventory.json" #Ruta compartida con receptor y worker.
+LEDGER_PATH = "data/events.json" #Estado durable por event_id.
 
 
 TRANSIENT_CODES = {
@@ -56,7 +61,7 @@ def _bucket_tags(s3, bucket_id: str) -> dict[str, str]:
 
 def _required_tags(resource: dict) -> dict[str, str]:
     """Valida que el inventario entregue una política de etiquetas escribible."""
-    tags = resource.get("tags")
+    tags = resource.get("expected_tags")
     if (not isinstance(tags, dict) or not tags
             or any(not isinstance(key, str) or not isinstance(value, str)
                    for key, value in tags.items())):
@@ -135,7 +140,6 @@ def repair(resource: dict, event_type: str) -> str:
 
     raise PermanentError("El tipo de evento no está permitido")
 
-
 def handle(event: dict) -> None:
     """Completa reparación y notificación usando un registro durable por evento.
 
@@ -144,22 +148,79 @@ def handle(event: dict) -> None:
     Returns:
         None solo cuando reparación y aviso quedaron registrados como exitosos.
     Raises:
-        ValidationError: Si el evento fue inyectado directamente a SQS y no es válido.
+        ValidationError: Si el evento inyectado no es válido.
         RetryableError: Si la simulación o una dependencia temporal falla.
         PermanentError: Conflicto de event_id o recurso no autorizado.
-        NotImplementedError: Mientras falte TODO I5-B.
+        NotImplementedError: Mientras falte TODO I3-C o I4-A.
     Side Effects:
         Actualiza recursos, data/events.json y el canal de comunicación.
     Notes:
         Un solo proceso modifica el ledger. Un timeout al notificar puede repetir
         un aviso: no existe una transacción común entre JSON, AWS y Telegram/Slack.
+        Un event_id reutilizado con otro contenido se registra en `_conflicts`
+        y se conserva para la DLQ sin modificar el primer registro ni los recursos.
     """
-    # TODO I5-B: cargar inventario y validar; cargar ledger por event_id.
-    # Vincular event_id al contenido del evento; rechazar reutilización con otro contenido.
-    # Guardar attempts incrementado antes de simular fallas; persiste entre reinicios.
-    # Si attempts <= simulate_failures, lanzar RetryableError sin modificar recursos.
-    # Si repair_done es falso: repair; guardar resultado y repair_done=True.
-    # Si notified es falso: notify resumen; guardar notified=True después del éxito.
-    # Si ambas etapas ya estaban completas, retornar sin efectos repetidos.
-    # Cada save debe preservar el resto del ledger; no sobrescribir otros eventos.
-    raise NotImplementedError("I5-B: integrar etapas y ledger durable")
+    inventory = load(INVENTORY_PATH)
+    validated = validate(event, inventory)  # Revalida aunque venga de SQS.
+    event_id = validated["event_id"]
+    content = json.dumps(validated, sort_keys=True, ensure_ascii=False)
+
+    ledger = load(LEDGER_PATH)
+    record = ledger.get(event_id)
+
+    if record is not None:
+        if record.get("content") != content:
+            conflicts = ledger.setdefault("_conflicts", {})
+            conflicts.setdefault(event_id, []).append({
+                "received_content": content,
+                "resource_id": validated["resource_id"],
+                "event_type": validated["event_type"],
+                "reason": "event_id reutilizado con otro contenido",
+                "status": "conflict",
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            })
+            save(LEDGER_PATH, ledger)  # Solo agrega el conflicto; no toca record.
+            raise PermanentError("event_id reutilizado con otro contenido")
+        if record.get("repair_done") and record.get("notified"):
+            if record.get("status") != "done":  # Completa un ledger viejo.
+                record["status"] = "done"
+                save(LEDGER_PATH, ledger)
+            return  # Nada pendiente: no repetir acciones ya verificadas.
+    else:
+        record = {
+            "content": content,
+            "attempts": 0,
+            "repair_done": False,
+            "repair_result": None,
+            "notified": False,
+            "status": "pending",
+        }
+        ledger[event_id] = record
+
+    record["attempts"] = int(record.get("attempts", 0)) + 1
+    record["status"] = "retrying"
+    save(LEDGER_PATH, ledger)  # attempts durable antes de cualquier efecto.
+
+    if record["attempts"] <= validated["simulate_failures"]:
+        raise RetryableError("Falla simulada pendiente de reintento")
+
+    resource = inventory[validated["resource_id"]]
+
+    if not record.get("repair_done"):
+        record["repair_result"] = repair(resource, validated["event_type"])
+        record["repair_done"] = True
+        record["status"] = "repaired"
+        save(LEDGER_PATH, ledger)  # Reparación durable antes de notificar.
+
+    if not record.get("notified"):
+        notify(
+            f"Evento {event_id}: {validated['event_type']} en "
+            f"{validated['resource_id']} -> "
+            f"{record.get('repair_result', 'sin cambios')}"
+        )
+        record["notified"] = True
+        record["status"] = "done"
+        save(LEDGER_PATH, ledger)
+
+    record["status"] = "done"
+    save(LEDGER_PATH, ledger)

@@ -21,11 +21,11 @@ EVENT = {
     "simulate_failures": 0,
 }
 INVENTORY = {
-    "node-01": {"type": "ec2", "id": "i-test", "tags": {}},
+    "node-01": {"type": "ec2", "id": "i-test", "security_group_id": "sg-test",
+                "expected_tags": {}},
     "bucket-01": {"type": "s3", "id": "bucket-test",
-                  "tags": {"ManagedBy": "ppa2", "Owner": "grupo01"}},
+                  "expected_tags": {"ManagedBy": "ppa2", "Owner": "grupo01"}},
 }
-
 
 def _signed(body: bytes, timestamp: int | None = None) -> dict[str, str]:
     """Devuelve las cabeceras para los mismos bytes que recibirá el endpoint."""
