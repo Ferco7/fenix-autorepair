@@ -20,7 +20,7 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 | I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | bynanofer@gmail.com | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | `tests/test_i2_mensajeria.py` (9: 7 unitarios + 2 de integración) + `tests/test_scenarios.py::test_redrive_with_localstack` (custodia I6) |
 | I3 - Webhooks y Reparación | Mamani, Hector Mauricio | _Completar_ | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | _Completar_ |
 | I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | _Completar_ | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | _Completar_ |
-| I5 - Integración y Worker | Rodríguez, Hector Fernando | _Completar_ | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | _Completar_ |
+| I5 - Integración y Worker | Rodríguez, Hector Fernando | elferchurodriguez08@gmail.com | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | `tests/test_i5_worker.py` (13 casos) |
 | I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | _Completar_ | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | _Completar_ |
 
 > **Nota**: el correo es obligatorio en la entrega. Cada estudiante debe poder explicar y modificar su código, realizar commits propios y revisar al menos un módulo de otro compañero. La asignación operativa está en [`docs/ROLES.md`](docs/ROLES.md).
@@ -191,7 +191,7 @@ python -m fenix.cli send examples/node-event.json
 | F12 | Cortar tras `repair_done` antes de `notify` | _Completar_ | Reinicio recupera solo aviso pendiente | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F14 | Mock aviso 429/timeout luego éxito | _Completar_ | No repite reparación; reintenta aviso | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F15 | Cambiar payload conservando `event_id` | _Completar_ | Conflicto; no altera ledger/recursos originales | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F15 | Cambiar payload conservando `event_id` | `handle` dos veces con distinto contenido | Conflicto; no altera ledger/recursos originales | Conflicto en `_conflicts`; registro original y recursos intactos; sin ACK | `tests/test_i5_worker.py::test_handle_registra_conflicto_sin_cambiar_el_original` | I5 | 2026-11-13 |
 | F16 | Forzar rotación, leer `.gz`, parsear líneas | _Completar_ | JSON válido, UTC, contexto; sin secretos | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 
 > Automáticas sugeridas: F04,F05,F06,F07,F09,F11/F12,F16. Integración LocalStack: F01,F02,F03,F08,F10,F13.
