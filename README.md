@@ -17,7 +17,7 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 | Rol | Apellido y nombre | Correo | Módulos principales | Pruebas defendidas |
 |---|---|---|---|---|
 | I1 - Entradas y Excepciones | Herrera, Nancy Mariel | _Completar_ | `src/fenix/utils/validation.py`, `src/fenix/utils/errors.py`, `src/fenix/services/events.py` | _Completar_ |
-| I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | _Completar_ | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | _Completar_ |
+| I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | bynanofer@gmail.com | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | `tests/test_i2_mensajeria.py` (9: 7 unitarios + 2 de integración) + `tests/test_scenarios.py::test_redrive_with_localstack` (custodia I6) |
 | I3 - Webhooks y Reparación | Mamani, Hector Mauricio | _Completar_ | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | _Completar_ |
 | I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | _Completar_ | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | _Completar_ |
 | I5 - Integración y Worker | Rodríguez, Hector Fernando | _Completar_ | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | _Completar_ |
