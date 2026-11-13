@@ -151,8 +151,10 @@ def setup_demo(group: str) -> dict:
         group: ID validado del grupo; determina prefijos de los recursos.
     Returns:
         Inventario con aliases node-01 y bucket-01 y sus IDs reales del emulador.
-        La clave reservada ``_lab`` guarda grupo, VPC, AMI y SG; los aliases
-        cumplen ``[a-z0-9-]{3,32}`` y nunca colisionan con ``_lab``.
+        ``node-01`` incluye ``security_group_id`` y ambos aliases guardan
+        ``expected_tags``; la clave reservada ``_lab`` conserva grupo, VPC, AMI
+        y SG como punto de control. Los aliases cumplen ``[a-z0-9-]{3,32}`` y
+        nunca colisionan con ``_lab``.
     Raises:
         ValidationError: Si group no cumple el contrato de identifier.
         PermanentError: Si el inventario o un recurso pertenecen a otro grupo.
@@ -171,14 +173,15 @@ def setup_demo(group: str) -> dict:
         raise PermanentError("data/inventory.json pertenece a otro grupo")
 
     vpc_id, image_id = mock_inputs()  # Descubre VPC e ImageId del emulador.
-    tags = _required_tags(group)
+    expected_tags = _required_tags(group)  # Solo las cuatro etiquetas exigidas.
     instance_name = f"fenix-{group}-node"
-    instance_tags = {**tags, "Name": instance_name}
+    instance_tags = {**expected_tags, "Name": instance_name}
     bucket_name = f"fenix-{group}-demo"
     sg_name = f"fenix-{group}-sg"
 
     ec2 = client("ec2")
-    security_group_id = _ensure_security_group(ec2, group, sg_name, vpc_id, tags)
+    security_group_id = _ensure_security_group(ec2, group, sg_name, vpc_id,
+                                               expected_tags)
     inventory["_lab"] = {
         "group": group,
         "region": os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
@@ -194,11 +197,13 @@ def setup_demo(group: str) -> dict:
     instance_id = _ensure_instance(ec2, group, instance_name, image_id,
                                    security_group_id, instance_tags)
     inventory["node-01"] = {"type": "ec2", "id": instance_id,
-                            "tags": instance_tags}
+                            "security_group_id": security_group_id,
+                            "expected_tags": expected_tags}
     save(INVENTORY_PATH, inventory)  # Guarda el ID real antes de seguir.
 
-    bucket_id = _ensure_bucket(client("s3"), bucket_name, group, tags)
-    inventory["bucket-01"] = {"type": "s3", "id": bucket_id, "tags": tags}
+    bucket_id = _ensure_bucket(client("s3"), bucket_name, group, expected_tags)
+    inventory["bucket-01"] = {"type": "s3", "id": bucket_id,
+                              "expected_tags": expected_tags}
     save(INVENTORY_PATH, inventory)  # Inventario completo y verificado.
     return inventory
 

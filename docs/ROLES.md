@@ -111,7 +111,7 @@ en `tests/test_i1_entradas.py`.
 |---|---|
 | `ensure_queues(prefix)` | crear primero la DLQ y después `{prefix}-events`; `VisibilityTimeout=45`, retención 345600, DLQ 1209600, `RedrivePolicy` con `maxReceiveCount=3`; forzar la política con `set_queue_attributes`; devolver URLs del SDK |
 | `retry_later(url, message)` | leer `ApproximateReceiveCount`, calcular `min(30, 2 ** count)`, llamar `change_message_visibility` con el `ReceiptHandle` actual y devolver los segundos; **nunca** `send_message` |
-| `setup_demo(group)` | validar `group`, VPC default, AMI mock, SG con tags, instancia con `ClientToken` estable, bucket con tags y `data/inventory.json`; reutilizar por tags antes de crear |
+| `setup_demo(group)` | validar `group`, VPC default, AMI mock, SG con tags, instancia con `ClientToken` estable, bucket con tags y `data/inventory.json`; `node-01` guarda `security_group_id` y `expected_tags`; `bucket-01` guarda `expected_tags`; reutilizar por tags antes de crear |
 
 **Pruebas que defiende:** `tests/test_i2_mensajeria.py` + el escenario de redrive
 real (`tests/test_scenarios.py::test_redrive_with_localstack`, custodiado por I6).
