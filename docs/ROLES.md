@@ -215,8 +215,8 @@ después de que reparación y aviso quedaron durables.
 
 | Función | Contrato |
 |---|---|
-| `run(url, handler, logger, once=False)` | bucle; `receive` en try; por mensaje, contexto `message_id` antes de `json.loads`; exigir dict; ACK solo tras éxito; JSON/validación/negocio/red -> `retry_later`; fallo de ACK deja el mensaje disponible; nunca ACK en `finally`; `once` hace una consulta; `NotImplementedError` se propaga |
-| `handle(event)` | cargar inventario y validar; ledger por `event_id`; vincular ID y contenido; incrementar `attempts` antes de simular fallas; si `attempts <= simulate_failures` -> `RetryableError` sin tocar recursos; reparar si falta; notificar si falta; no repetir etapas completas; cada `save` preserva el resto del ledger |
+| run(url, handler, logger, once=False) | bucle; receive en try; por mensaje, contexto con message_id y attempt (ApproximateReceiveCount) antes de json.loads; exigir dict; agregar event_id, resource_id y action al contexto de cada log; ACK solo tras éxito; JSON/validación/negocio/red -> retry_later; fallo de ACK deja el mensaje disponible; nunca ACK en finally; once hace una consulta; NotImplementedError se propaga |
+| handle(event) | cargar inventario y validar; ledger por event_id; vincular ID y contenido; incrementar attempts antes de simular fallas; si attempts <= simulate_failures -> RetryableError sin tocar recursos; reparar si falta; notificar si falta; no repetir etapas completas; cada save preserva el resto del ledger; si el event_id reaparece con otro contenido, registrar el conflicto en _conflicts y conservarlo para la DLQ sin modificar el primer registro ni los recursos |
 
 **Pruebas que defiende:** `tests/test_i5_worker.py` (fakes de SQS) +
 `test_scenarios.py::test_duplicate_is_idempotent` y `test_ack_is_after_success`

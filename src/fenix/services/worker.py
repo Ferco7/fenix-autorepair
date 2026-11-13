@@ -20,6 +20,9 @@ def run(url: str, handler, logger, once: bool = False) -> None:
         NotImplementedError: Si todavía falta una plantilla del equipo.
     Side Effects:
         Consume, reprograma o confirma mensajes; nunca confirma en finally.
+    Notes:
+        Los logs incluyen event_id, resource_id, action y attempt cuando el
+        mensaje se pudo parsear; el formateador completa el resto con null.
     """
     while True:
         try:
@@ -34,23 +37,34 @@ def run(url: str, handler, logger, once: bool = False) -> None:
 
         for message in messages:
             message_id = message.get("MessageId")  # Contexto antes de parsear.
+            raw_attempt = message.get("Attributes", {}).get("ApproximateReceiveCount")
+            try:
+                # Entregas de este mensaje SQS; no confundir con el ledger.
+                attempt = int(raw_attempt) if raw_attempt is not None else None
+            except (TypeError, ValueError):
+                attempt = None  # Un atributo raro no debe tumbar el worker.
+            context = {"message_id": message_id, "attempt": attempt}
             try:
                 event = json.loads(message.get("Body", ""))
                 if not isinstance(event, dict):
                     raise ValueError("El cuerpo del mensaje no es un objeto JSON")
+                context.update({
+                    "event_id": event.get("event_id"),
+                    "resource_id": event.get("resource_id"),
+                    "action": event.get("event_type"),
+                })
                 handler(event)
             except NotImplementedError:
                 raise  # Una plantilla pendiente debe verse, nunca confirmarse.
             except (ValueError, TypeError, KeyError, ProjectError,
                     BotoCoreError, ClientError, OSError) as error:
                 logger.error("mensaje_reintentable",
-                             extra={"message_id": message_id,
-                                    "status": type(error).__name__})
+                             extra={**context, "status": type(error).__name__})
                 try:
                     retry_later(url, message)
                 except (BotoCoreError, ClientError, KeyError) as retry_error:
                     logger.error("fallo_retry",
-                                 extra={"message_id": message_id,
+                                 extra={**context,
                                         "status": type(retry_error).__name__})
                     if once:
                         return
@@ -61,14 +75,13 @@ def run(url: str, handler, logger, once: bool = False) -> None:
                 acknowledge(url, message["ReceiptHandle"])
             except (BotoCoreError, ClientError, KeyError) as error:
                 logger.error("fallo_ack",
-                             extra={"message_id": message_id,
-                                    "status": type(error).__name__})
+                             extra={**context, "status": type(error).__name__})
                 if once:
                     return
                 time.sleep(2)
             else:
                 logger.info("mensaje_confirmado",
-                            extra={"message_id": message_id, "status": "ok"})
+                            extra={**context, "status": "ok"})
 
         if once:
             return

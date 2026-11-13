@@ -1,5 +1,6 @@
 """Acciones convergentes a completar por integrante 3 y coordinadas por 5."""
 import json  #vincula cada event_id con el contenido exacto recibido
+from datetime import datetime,timezone #Marca UTC del conflicto registrado
 from fenix.config.settings import client
 from fenix.utils.state import load, save
 from fenix.services.events import validate
@@ -37,7 +38,6 @@ def repair(resource: dict, event_type: str) -> str:
     # Clasificar ClientError por código: throttling/5xx transitorio, no todo ClientError.
     raise NotImplementedError("I3-C: implementar remediación convergente")
 
-
 def handle(event: dict) -> None:
     """Completa reparación y notificación usando un registro durable por evento.
 
@@ -55,6 +55,8 @@ def handle(event: dict) -> None:
     Notes:
         Un solo proceso modifica el ledger. Un timeout al notificar puede repetir
         un aviso: no existe una transacción común entre JSON, AWS y Telegram/Slack.
+        Un event_id reutilizado con otro contenido se registra en `_conflicts`
+        y se conserva para la DLQ sin modificar el primer registro ni los recursos.
     """
     inventory = load(INVENTORY_PATH)
     validated = validate(event, inventory)  # Revalida aunque venga de SQS.
@@ -66,6 +68,16 @@ def handle(event: dict) -> None:
 
     if record is not None:
         if record.get("content") != content:
+            conflicts = ledger.setdefault("_conflicts", {})
+            conflicts.setdefault(event_id, []).append({
+                "received_content": content,
+                "resource_id": validated["resource_id"],
+                "event_type": validated["event_type"],
+                "reason": "event_id reutilizado con otro contenido",
+                "status": "conflict",
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            })
+            save(LEDGER_PATH, ledger)  # Solo agrega el conflicto; no toca record.
             raise PermanentError("event_id reutilizado con otro contenido")
         if record.get("repair_done") and record.get("notified"):
             if record.get("status") != "done":  # Completa un ledger viejo.
