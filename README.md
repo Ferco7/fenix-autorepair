@@ -18,7 +18,7 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 |---|---|---|---|---|
 | I1 - Entradas y Excepciones | Herrera, Nancy Mariel | _Completar_ | `src/fenix/utils/validation.py`, `src/fenix/utils/errors.py`, `src/fenix/services/events.py` | _Completar_ |
 | I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | bynanofer@gmail.com | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | `tests/test_i2_mensajeria.py` (9: 7 unitarios + 2 de integración) + `tests/test_scenarios.py::test_redrive_with_localstack` (custodia I6) |
-| I3 - Webhooks y Reparación | Mamani, Hector Mauricio | _Completar_ | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | _Completar_ |
+| I3 - Webhooks y Reparación | Mamani, Hector Mauricio | maurobvx@gmail.com | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | _Completar_ |
 | I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | _Completar_ | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | _Completar_ |
 | I5 - Integración y Worker | Rodríguez, Hector Fernando | _Completar_ | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | _Completar_ |
 | I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | _Completar_ | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | _Completar_ |
@@ -128,6 +128,25 @@ flowchart LR
 ### Firma HMAC
 `HMAC-SHA256(secret, bytes(t) + b"." + raw_body)`  
 Cabecera: `X-Webhook-Signature: t=<epoch>,v1=<64 hex>` (ventana 300s).
+
+### Orden del receptor y correlación
+
+1. Rechaza el cuerpo que excede 16 KiB con **413**; aplica el conteo también a
+   transferencias sin `Content-Length` confiable.
+2. Exige una sola cabecera `X-Webhook-Signature`, verifica `t`/`v1` estrictos y
+   el HMAC sobre los bytes originales. Cualquier fallo de autenticación es
+   **401**, sin exponer si falló formato, tiempo o digest.
+3. Solo con firma válida decodifica UTF-8 y JSON estricto (**400**) y después
+   valida el contrato cerrado y el alias del inventario (**422**).
+4. Resuelve la cola y ejecuta el `send_message` síncrono de Boto3 mediante un
+   hilo de trabajo, esperando su `MessageId`. Un error de SQS/configuración es
+   **503**: nunca se responde aceptación sin persistencia confirmada.
+5. Recién entonces devuelve **202** con `event_id` y `message_id`. El primero
+   también viaja como atributo SQS `EventId` y es la correlación con worker,
+   ledger y logs. El receptor no repara ni notifica.
+
+El límite tiene precedencia sobre la firma para limitar consumo de recursos;
+para los cuerpos dentro del límite la autenticación precede todo parseo JSON.
 
 ### Respuestas HTTP del receptor
 | Situación | HTTP | Efecto |
