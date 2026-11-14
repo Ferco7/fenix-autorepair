@@ -18,8 +18,8 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 |---|---|---|---|---|
 | I1 - Entradas y Excepciones | Herrera, Nancy Mariel | _Completar_ | `src/fenix/utils/validation.py`, `src/fenix/utils/errors.py`, `src/fenix/services/events.py` | _Completar_ |
 | I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | bynanofer@gmail.com | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | `tests/test_i2_mensajeria.py` (9: 7 unitarios + 2 de integración) + `tests/test_scenarios.py::test_redrive_with_localstack` (custodia I6) |
-| I3 - Webhooks y Reparación | Mamani, Hector Mauricio | _Completar_ | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | _Completar_ |
-| I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | facundosebasalegre@gmail.com | src/fenix/utils/logging_json.py, src/fenix/services/notifications.py | tests/test_i4_observabilidad.py (26 casos) |
+| I3 - Webhooks y Reparación | Mamani, Hector Mauricio | maurobvx@gmail.com | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | `tests/test_i3_webhooks.py` (11 casos) |
+| I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | facundosebasalegre@gmail.com | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | `tests/test_i4_observabilidad.py` (26 casos) |
 | I5 - Integración y Worker | Rodríguez, Hector Fernando | elferchurodriguez08@gmail.com | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | `tests/test_i5_worker.py` (13 casos) |
 | I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | _Completar_ | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | _Completar_ |
 
@@ -129,6 +129,25 @@ flowchart LR
 `HMAC-SHA256(secret, bytes(t) + b"." + raw_body)`  
 Cabecera: `X-Webhook-Signature: t=<epoch>,v1=<64 hex>` (ventana 300s).
 
+### Orden del receptor y correlación
+
+1. Rechaza el cuerpo que excede 16 KiB con **413**; aplica el conteo también a
+   transferencias sin `Content-Length` confiable.
+2. Exige una sola cabecera `X-Webhook-Signature`, verifica `t`/`v1` estrictos y
+   el HMAC sobre los bytes originales. Cualquier fallo de autenticación es
+   **401**, sin exponer si falló formato, tiempo o digest.
+3. Solo con firma válida decodifica UTF-8 y JSON estricto (**400**) y después
+   valida el contrato cerrado y el alias del inventario (**422**).
+4. Resuelve la cola y ejecuta el `send_message` síncrono de Boto3 mediante un
+   hilo de trabajo, esperando su `MessageId`. Un error de SQS/configuración es
+   **503**: nunca se responde aceptación sin persistencia confirmada.
+5. Recién entonces devuelve **202** con `event_id` y `message_id`. El primero
+   también viaja como atributo SQS `EventId` y es la correlación con worker,
+   ledger y logs. El receptor no repara ni notifica.
+
+El límite tiene precedencia sobre la firma para limitar consumo de recursos;
+para los cuerpos dentro del límite la autenticación precede todo parseo JSON.
+
 ### Respuestas HTTP del receptor
 | Situación | HTTP | Efecto |
 |---|---:|---|
@@ -190,9 +209,9 @@ python -m fenix.cli send examples/node-event.json
 | F11 | Repetir evento completo; reiniciar worker | _Completar_ | Sin nueva reparación ni aviso confirmado | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F12 | Cortar tras `repair_done` antes de `notify` | _Completar_ | Reinicio recupera solo aviso pendiente | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F14 | Mock aviso 429/timeout luego éxito | notify con 429 y handle de nuevo | No repite reparación; reintenta aviso | 429 y timeout -> RetryableError; reparación 1 vez; aviso confirmado en el segundo intento | tests/test_i4_observabilidad.py::test_f14_429_no_repite_reparacion + ::test_errores_de_red_son_reintentables | I4 | 2026-11-14 |
+| F14 | Mock aviso 429/timeout luego éxito | `notify` con 429 y `handle` de nuevo | No repite reparación; reintenta aviso | 429 y timeout → `RetryableError`; reparación 1 vez; aviso confirmado en el segundo intento | `tests/test_i4_observabilidad.py::test_f14_429_no_repite_reparacion` + `::test_errores_de_red_son_reintentables` | I4 | 2026-11-14 |
 | F15 | Cambiar payload conservando `event_id` | `handle` dos veces con distinto contenido | Conflicto; no altera ledger/recursos originales | Conflicto en `_conflicts`; registro original y recursos intactos; sin ACK | `tests/test_i5_worker.py::test_handle_registra_conflicto_sin_cambiar_el_original` | I5 | 2026-11-13 |
-| F16 | Forzar rotación, leer .gz, parsear líneas | RotatingFileHandler reducido con gzip_rotate | JSON válido, UTC, contexto; sin secretos | .jsonl.1.gz con líneas JSON; timestamp UTC y solo campos autorizados | tests/test_i4_observabilidad.py::test_rotacion_gzip_comprime_y_borra | I4 | 2026-11-14 |
+| F16 | Forzar rotación, leer `.gz`, parsear líneas | `RotatingFileHandler` reducido con `gzip_rotate` | JSON válido, UTC, contexto; sin secretos | `.jsonl.1.gz` con líneas JSON; timestamp UTC y solo campos autorizados | `tests/test_i4_observabilidad.py::test_rotacion_gzip_comprime_y_borra` | I4 | 2026-11-14 |
 
 > Automáticas sugeridas: F04,F05,F06,F07,F09,F11/F12,F16. Integración LocalStack: F01,F02,F03,F08,F10,F13.
 >
@@ -222,6 +241,7 @@ python -m fenix.cli send examples/node-event.json
 - Comando previsto:
   ```bash
   NOTIFY_PROVIDER=telegram python -c "from fenix.services.notifications import notify; notify('Prueba Fénix I4 - Facundo Alegre')"
+  ```
 
 ## 14. Limpieza del laboratorio
 
