@@ -21,7 +21,7 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 | I3 - Webhooks y Reparación | Mamani, Hector Mauricio | maurobvx@gmail.com | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | `tests/test_i3_webhooks.py` (11 casos) |
 | I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | _Completar_ | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | _Completar_ |
 | I5 - Integración y Worker | Rodríguez, Hector Fernando | elferchurodriguez08@gmail.com | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | `tests/test_i5_worker.py` (13 casos) |
-| I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | _Completar_ | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | _Completar_ |
+| I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | lautaro.lg48@gmail.com | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | _Completar_ |
 
 > **Nota**: el correo es obligatorio en la entrega. Cada estudiante debe poder explicar y modificar su código, realizar commits propios y revisar al menos un módulo de otro compañero. La asignación operativa está en [`docs/ROLES.md`](docs/ROLES.md).
 
