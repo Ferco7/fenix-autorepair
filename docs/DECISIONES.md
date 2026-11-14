@@ -87,6 +87,12 @@ Ventana: |now - t| <= 300 s
 | `send_message` confirmado | 202 | Devuelve `event_id` y `message_id` |
 
 Primero se guarda durable en SQS; después se responde 2xx. Nunca al revés.
+El cuerpo se limita antes de autenticar para contener consumo de memoria; dentro
+del límite el orden es HMAC sobre bytes crudos → UTF-8/JSON → contrato e
+inventario → SQS. La llamada Boto3 no es asíncrona: el handler la ejecuta en un
+hilo de trabajo y espera el `MessageId` antes de devolver 202. `event_id` queda
+en la respuesta y como atributo `EventId` de SQS para correlacionar receptor,
+worker, ledger y logs sin registrar el cuerpo ni la firma.
 
 ## 7. Notificaciones
 
@@ -109,6 +115,13 @@ Primero se guarda durable en SQS; después se responde 2xx. Nunca al revés.
    de guardar el resultado.
 6. La ventana HMAC no impide repeticiones dentro de los 300 s.
 7. `python-dotenv` no sobrescribe variables ya exportadas en la terminal.
+8. HMAC no sustituye TLS, límites de tasa ni control de acceso de red. En una
+   exposición pública se requiere un proxy que termine TLS, aplique el límite
+   de tamaño antes de Uvicorn, rate limiting y, si el emisor lo permite, una
+   lista de redes origen.
+9. El secreto compartido no tiene rotación ni identificador de clave. Una
+   integración real debe admitir rotación con dos claves durante la transición,
+   almacenarlas fuera de `.env` y revocar de inmediato ante exposición.
 
 ## 9. Correcciones conceptuales (material de defensa)
 

@@ -35,14 +35,48 @@ def verify(secret: str, header: str, body: bytes, now: int | None = None) -> Non
         None si las comprobaciones son satisfactorias.
     Raises:
         ValidationError: Formato inválido, firma incorrecta o diferencia mayor a 300 s.
-        NotImplementedError: Mientras no se complete TODO I3-A.
     Notes:
         La ventana de tiempo mitiga replay antiguo. No impide repetir un evento
         válido dentro de la ventana; event_id e idempotencia cubren ese caso.
     """
-    # TODO I3-A: separar por comas; exigir exactamente t y v1 una sola vez.
-    # Rechazar timestamp no entero y v1 que no tenga 64 caracteres hexadecimales.
-    # Usar abs((int(time.time()) if now is None else now) - timestamp) <= 300.
-    # Calcular signature y comparar con hmac.compare_digest; no usar ==.
-    # Convertir fallos de parseo en ValidationError sin mostrar header ni secreto.
-    raise NotImplementedError("I3-A: verificar HMAC y fecha")
+    invalid = ValidationError("Firma de webhook inválida")
+    if not isinstance(header, str) or not isinstance(body, bytes):
+        raise invalid
+
+    # Se exige exactamente el formato del contrato: dos partes, sin claves
+    # repetidas ni parámetros que un intermediario pueda interpretar distinto.
+    parts = header.split(",")
+    if len(parts) != 2:
+        raise invalid
+    values: dict[str, str] = {}
+    for part in parts:
+        key, separator, value = part.partition("=")
+        if (separator != "=" or not key or not value or key in values
+                or key not in {"t", "v1"}):
+            raise invalid
+        values[key] = value
+    if set(values) != {"t", "v1"}:
+        raise invalid
+
+    timestamp_text = values["t"]
+    supplied = values["v1"]
+    if (not timestamp_text.isascii() or not timestamp_text.isdecimal()
+            or len(supplied) != 64
+            or any(char not in "0123456789abcdef" for char in supplied)):
+        raise invalid
+
+    try:
+        timestamp = int(timestamp_text)
+        current = int(time.time()) if now is None else int(now)
+    except (TypeError, ValueError, OverflowError):
+        raise invalid from None
+    if abs(current - timestamp) > 300:
+        raise invalid
+
+    try:
+        expected = signature(secret, timestamp, body)
+    except (TypeError, ValidationError):
+        # Una configuración ausente también falla cerrada y no expone su detalle.
+        raise invalid from None
+    if not hmac.compare_digest(expected, supplied):
+        raise invalid
