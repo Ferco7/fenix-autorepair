@@ -204,8 +204,8 @@ python -m fenix.cli send examples/node-event.json
 | F06 | JSON roto firmado; lista JSON firmada | _Completar_ | 400 y 422; sin publicación | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F07 | Alias ajeno y claves extra | _Completar_ | Rechazo; ningún cambio cloud | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F08 | JSON corrupto inyectado directo a SQS | _Completar_ | Worker sigue; mensaje termina en DLQ | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F09 | `simulate_failures=2` (ID nuevo) | _Completar_ | Backoff; luego reparación y ACK | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F10 | Falla persistente (ID nuevo) | _Completar_ | Sin ACK; derivación a DLQ | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F09 | `simulate_failures=2` (ID nuevo) | `init-queues` + `setup-demo` + nodo detenido; evento con `event_id` nuevo a SQS | Backoff; luego reparación y ACK | 3 intentos: 1 y 2 `RetryableError` (visibilidad 2 s y 4 s); intento 3 `repair_done`/`notified`/`status=done`; nodo `running` por SDK; cola en 0 | [`evidence/F09-backoff-reintentos.md`](evidence/F09-backoff-reintentos.md) | I2 | 2026-11-14 |
+| F10 | Falla persistente (ID nuevo) | Colas propias `fenix-i2dlq-20261114` + `simulate_failures=5` | Sin ACK; derivación a DLQ | 3 intentos sin ACK; redrive a la DLQ; mensaje leído con `Body` original, `ApproximateReceiveCount=4` y `DeadLetterQueueSourceArn`; cola de trabajo en 0 | [`evidence/F10-lectura-dlq.md`](evidence/F10-lectura-dlq.md) | I2 | 2026-11-14 |
 | F11 | Repetir evento completo; reiniciar worker | _Completar_ | Sin nueva reparación ni aviso confirmado | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F12 | Cortar tras `repair_done` antes de `notify` | _Completar_ | Reinicio recupera solo aviso pendiente | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
@@ -245,14 +245,92 @@ python -m fenix.cli send examples/node-event.json
 
 ## 14. Limpieza del laboratorio
 
-```text
-# Completar con comandos/pasos usados:
-# - Terminar instancia inventariada
-# - Vaciar y borrar bucket inventariado
-# - Eliminar security group cuando no esté en uso
-# - Destruir colas solo después de documentar la DLQ
-# - docker compose down (si aplica)
+Después de documentar la evidencia (sobre todo la DLQ) se ejecutó esta limpieza
+con el SDK contra el inventario. Cada bloque informa qué eliminó; si un recurso
+ya no existe, se saltea ese bloque para no abortar el resto.
+
+```bash
+python - <<'PY'
+import json, time
+from dotenv import load_dotenv
+load_dotenv(".env")
+from fenix.config.settings import client
+from fenix.services import sqs
+
+inv = json.load(open("data/inventory.json", encoding="utf-8"))
+iid = inv["node-01"]["id"]
+bucket = inv["bucket-01"]["id"]
+sg = inv["node-01"]["security_group_id"]
+ec2, s3, sqsc = client("ec2"), client("s3"), sqs.client("sqs")
+
+# 1) Colas propias del ensayo de DLQ (solo después de documentar el mensaje).
+for name in ("fenix-i2dlq-20261114-events", "fenix-i2dlq-20261114-dlq"):
+    sqsc.delete_queue(QueueUrl=sqsc.get_queue_url(QueueName=name)["QueueUrl"])
+    print("cola eliminada:", name)
+
+# 2) Instancia inventariada: terminar y esperar el estado final.
+ec2.terminate_instances(InstanceIds=[iid])
+for _ in range(30):
+    r = ec2.describe_instances(InstanceIds=[iid])["Reservations"]
+    state = [i["State"]["Name"] for x in r for i in x["Instances"]][0]
+    if state == "terminated":
+        break
+    time.sleep(1)
+print("instancia:", iid, state)
+
+# 3) Bucket: vaciar objetos si quedaron y borrar.
+objs = s3.list_objects_v2(Bucket=bucket).get("Contents", [])
+if objs:
+    s3.delete_objects(Bucket=bucket,
+                      Delete={"Objects": [{"Key": o["Key"]} for o in objs]})
+s3.delete_bucket(Bucket=bucket)
+print("bucket eliminado:", bucket)
+
+# 4) Security group: reintentar hasta que EC2 libere la instancia.
+for _ in range(15):
+    try:
+        ec2.delete_security_group(GroupId=sg)
+        print("SG eliminado:", sg)
+        break
+    except Exception as error:
+        last = error
+        time.sleep(1)
+else:
+    print("SG:", type(last).__name__, last)
+
+# 5) Colas del grupo, si el laboratorio estaba en uso.
+for name in ("fenix-grupo01-events", "fenix-grupo01-dlq"):
+    try:
+        sqsc.delete_queue(QueueUrl=sqsc.get_queue_url(QueueName=name)["QueueUrl"])
+        print("cola eliminada:", name)
+    except Exception as error:
+        print("cola", name, ":", type(error).__name__)
+PY
+docker compose down
 ```
+
+Salida real de la última limpieza (2026-11-14):
+
+```text
+cola eliminada: fenix-i2dlq-20261114-events
+cola eliminada: fenix-i2dlq-20261114-dlq
+instancia: i-99bda695003fb5be9 terminated
+bucket eliminado: fenix-grupo01-demo
+SG eliminado: sg-d7daa57e468b09d4a
+cola eliminada: fenix-grupo01-events
+cola eliminada: fenix-grupo01-dlq
+ Container fenix-localstack  Removed
+ Network fenix_default  Removed
+```
+
+Orden importante:
+
+1. Documentar la DLQ **antes** de borrar las colas; si no, se pierde la prueba.
+2. Terminar la instancia antes de borrar el security group (EC2 lo retiene
+   mientras haya ENIs asociadas).
+3. Vaciar el bucket antes de borrarlo.
+4. `docker compose down` al final: sin volumen persistente, el próximo
+   `up -d` arranca el emulador limpio y `setup-demo` reconcilia el inventario.
 
 ## 15. Video y marcas de tiempo
 
@@ -324,26 +402,39 @@ fenix/
 
 ## 18. Estado por rol
 
-La base está **endurecida y verificada localmente**, pero la lógica de negocio sigue pendiente: hay **14 funciones con `NotImplementedError`**, repartidas así:
+Todos los roles tienen su código integrado en `main` salvo I6, que todavía debe
+completar `inject_fault` y los escenarios de integración. No queda ningún
+`NotImplementedError` en la lógica de negocio de I1–I5.
 
-| Rol | Integrante | Funciones pendientes | Archivos |
+| Rol | Integrante | Módulos entregados | Estado |
 |---|---|---|---|
-| I1 | Herrera, Nancy Mariel | `identifier`, `ttl_seconds`, `utc_text`, `validate` | `utils/validation.py`, `services/events.py` |
-| I2 | Maldonado, Fernando Manuel | `ensure_queues`, `retry_later`, `setup_demo` | `services/sqs.py`, `services/demo.py` |
-| I3 | Mamani, Hector Mauricio | `verify`, endpoint `/webhook`, `repair` | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` |
-| I4 | Alegre, Facundo Sebastián | `notify` | `services/notifications.py` |
-| I5 | Rodríguez, Hector Fernando | `run`, `handle` | `services/worker.py`, `services/remediation.py`, `cli.py` |
-| I6 | Gaspar, Lautaro Miguel Angel | `inject_fault` + suite F01–F16 | `services/demo.py`, `tests/` |
+| I1 | Herrera, Nancy Mariel | `utils/validation.py`, `utils/errors.py`, `services/events.py` | Integrado (#7) |
+| I2 | Maldonado, Fernando Manuel | `services/sqs.py`, `services/demo.py` (`setup_demo`) | Integrado (#1, #9) + evidencia F01/F09/F10 |
+| I3 | Mamani, Hector Mauricio | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` (`repair`) | Integrado (#12) |
+| I4 | Alegre, Facundo Sebastián | `utils/logging_json.py`, `services/notifications.py` | Integrado (#13) |
+| I5 | Rodríguez, Hector Fernando | `services/worker.py`, `services/remediation.py` (`handle`), `cli.py` | Integrado (#8, #10, #11) |
+| I6 | Gaspar, Lautaro Miguel Angel | `services/demo.py` (`inject_fault`), `tests/` | Pendiente: PR con F08/F10/F11/F12 |
 
-**Estado de la suite hoy:**
+**Estado de la suite hoy (con LocalStack arriba):**
 
 | Comando | Resultado |
 |---|---|
 | `pytest -m base -q` | **4 passed** (apoyo del template) |
-| `pytest -m pendiente -q` | 6 failed (esperado hasta completar roles) |
-| `pytest -m integracion -q` | 1 failed (requiere LocalStack y rol 5/6) |
+| `pytest -q` | **88 passed, 3 failed** |
+| `pytest -q` sin LocalStack | 86 passed, 5 failed |
 
-> El orden de trabajo recomendado es I1 → I2 → I3 → I5 → I4 → I6. I4 puede arrancar en paralelo porque solo depende de su propio módulo. Detalle y definición de terminado en [`docs/ROLES.md`](docs/ROLES.md).
+Los 3 fallos son los stubs de I6 en `tests/test_scenarios.py`
+(`test_duplicate_is_idempotent`, `test_ack_is_after_success`,
+`test_redrive_with_localstack`). Sin LocalStack fallan además las 2 pruebas de
+integración de I2 (`test_ensure_queues_against_localstack`,
+`test_setup_demo_is_idempotent_against_localstack`), que necesitan el emulador.
+
+> Con el PR de I6 mergeado, la suite completa queda en **102 passed** (los 3
+> stubs pasan a pruebas reales más 9 tests nuevos y 2 escenarios adicionales).
+> Esa corrida ya fue verificada sobre `8c46caa` en un worktree aparte.
+>
+> El orden de trabajo recomendado es I1 → I2 → I3 → I5 → I4 → I6. Detalle y
+> definición de terminado en [`docs/ROLES.md`](docs/ROLES.md).
 
 ## 19. Documentación del equipo
 
