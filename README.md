@@ -205,7 +205,7 @@ python -m fenix.cli send examples/node-event.json
 | F07 | Alias ajeno y claves extra | _Completar_ | Rechazo; ningún cambio cloud | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F08 | JSON corrupto inyectado directo a SQS | `pytest tests/test_scenarios.py::test_redrive_with_localstack -v` con LocalStack | Worker sigue; mensaje termina en DLQ | `1 passed`; el `Body` corrupto `{esto no es json` se leyó desde la DLQ y el worker siguió vivo con la cola vacía | [`evidence/F08-json-corrupto-dlq.md`](evidence/F08-json-corrupto-dlq.md) | I6 | 2026-11-14 |
 | F09 | `simulate_failures=2` (ID nuevo) | `init-queues` + `setup-demo` + nodo detenido; evento con `event_id` nuevo a SQS | Backoff; luego reparación y ACK | 3 intentos: 1 y 2 `RetryableError` (visibilidad 2 s y 4 s); intento 3 `repair_done`/`notified`/`status=done`; nodo `running` por SDK; cola en 0 | [`evidence/F09-backoff-reintentos.md`](evidence/F09-backoff-reintentos.md) | I2 | 2026-11-14 |
-| F10 | Falla persistente (ID nuevo) | Colas propias `fenix-i2dlq-20261114` + `simulate_failures=5` | Sin ACK; derivación a DLQ | 3 intentos sin ACK; redrive a la DLQ; mensaje leído con `Body` original, `ApproximateReceiveCount=4` y `DeadLetterQueueSourceArn`; cola de trabajo en 0 | [`evidence/F10-lectura-dlq.md`](evidence/F10-lectura-dlq.md) | I2 | 2026-11-14 |
+| F10 | Falla persistente (ID nuevo) | Colas propias `fenix-i2dlq-20261114` + `simulate_failures=5` | Sin ACK; derivación a DLQ | 3 intentos sin ACK; redrive a la DLQ; mensaje leído con `Body` original, `ApproximateReceiveCount=4` y `DeadLetterQueueSourceArn`; cola de trabajo en 0 | [`F10-lectura-dlq.md`](evidence/F10-lectura-dlq.md) · [`F10-falla-persistente-dlq.md`](evidence/F10-falla-persistente-dlq.md) | I2 | 2026-11-14 |
 | F11 | Repetir evento completo; reiniciar worker | `pytest tests/test_scenarios.py::test_duplicate_is_idempotent tests/test_scenarios.py::test_ack_is_after_success -v` | Sin nueva reparación ni aviso confirmado | `2 passed`; el segundo procesamiento no repara ni avisa; el ACK ocurre solo después del éxito | [`evidence/F11-duplicado-idempotente.md`](evidence/F11-duplicado-idempotente.md) | I6 | 2026-11-14 |
 | F12 | Cortar tras `repair_done` antes de `notify` | `pytest tests/test_scenarios.py::test_restart_after_repair_only_notifies -v` | Reinicio recupera solo aviso pendiente | `1 passed`; con `repair_done` ya registrado, el reinicio solo envía el aviso y no repite la reparación | [`evidence/F12-reinicio-solo-aviso.md`](evidence/F12-reinicio-solo-aviso.md) | I6 | 2026-11-14 |
 | F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
@@ -240,10 +240,15 @@ python -m fenix.cli send examples/node-event.json
 - Estado: **Pendiente de captura**.
 - El código de `notify` está implementado y probado con mocks (26 tests passed en `tests/test_i4_observabilidad.py`).
 - Se realizará el envío real a Telegram con credenciales propias y se adjuntará la captura anonimizada en `docs/images/evidencia-telegram-i4.png` antes de la entrega final.
-- Comando previsto:
+- Comando previsto (carga `.env` explícitamente porque `notifications.py` no lo hace solo):
   ```bash
+  set -a
+  source .env
+  set +a
   NOTIFY_PROVIDER=telegram python -c "from fenix.services.notifications import notify; notify('Prueba Fénix I4 - Facundo Alegre')"
   ```
+  `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` deben estar completos en `.env`.
+  Para Slack, cambiar `NOTIFY_PROVIDER` a `slack` y completar `SLACK_WEBHOOK_URL`.
 
 ## 14. Limpieza del laboratorio
 
@@ -405,7 +410,7 @@ fenix/
 │   ├── test_i6_diagnostico.py    # I6: inject_fault con fakes
 │   └── test_scenarios.py         # Escenarios F08/F10/F11/F12
 └── .github/
-    ├── workflows/ci.yml          # Tests base + compose config + doctor
+    ├── workflows/ci.yml          # Tests base + suite sin LocalStack + compose + doctor
     └── pull_request_template.md  # Checklist de PR
 ```
 
