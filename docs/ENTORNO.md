@@ -85,7 +85,7 @@ No se usa volumen persistente: cada `up` arranca limpio. Volver a ejecutar
 | `Falta variable AWS_DEFAULT_REGION` | Se exportó `AWS_REGION` en su lugar | Usar exactamente los nombres de `.env.example` |
 | `Endpoint local inválido` | `AWS_ENDPOINT_URL` no es loopback `:4566` | Corregir a `http://localhost:4566` |
 | `ModuleNotFoundError: fenix` | Paquete no instalado | `python -m pip install -e .` |
-| Tests fallan por `NotImplementedError` | TODOs del equipo | Es el estado esperado hasta completar el rol |
+| `NotImplementedError` al ejecutar una función | Quedó una plantilla sin completar | En `main` no debería aparecer: revisar [`docs/ROLES.md`](ROLES.md) y completar la función |
 
 ## 6. Trampas del laboratorio
 
@@ -107,10 +107,14 @@ No se usa volumen persistente: cada `up` arranca limpio. Volver a ejecutar
 
 ```bash
 pytest -m base -q          # apoyo del template: debe quedar verde siempre
-pytest -m pendiente -q     # contratos del equipo: rojo hasta implementar
+pytest -m pendiente -q     # contratos del template (hoy verdes)
 pytest -m integracion -q   # requiere LocalStack arriba
-pytest -q                  # todo (incluye pendientes)
+pytest -q                  # todo
 ```
+
+Con LocalStack arriba, `pytest -q` deja **102 passed**. Las suites
+`test_contracts.py` y `test_fenix.py` conservan la marca `pendiente` del
+template, pero en `main` ya están implementadas y pasan.
 
 Con el paquete instalado no hace falta `PYTHONPATH=src`. Si se corre sin instalar:
 

@@ -2,7 +2,7 @@
 
 Sistema que recibe una alerta de laboratorio mediante un **webhook autenticado**, la guarda en **SQS**, repara un recurso emulado por **Boto3/LocalStack** y comunica el resultado a **Telegram o Slack**.
 
-> Estado: **base endurecida** sobre la plantilla de Fénix. Las 14 funciones de negocio siguen pendientes y se reparten por rol (ver [`docs/ROLES.md`](docs/ROLES.md)). Completar TODOs, pruebas y evidencias antes de la entrega.
+> Estado: **sistema completo e integrado**. La suite da **102 passed** con LocalStack y el CI está en verde. Quedan pendientes evidencias de algunos casos de la matriz y los entregables grupales (video, aviso real y declaración de IA); ver §11 y §15–§16.
 
 ## 1. Objetivo del sistema
 
@@ -105,7 +105,7 @@ flowchart LR
   K[QueueHandler/Listener -> JSON logs] -.-> L["logs/*.log(.gz)"]
 ```
 
-> **Hito 4 (flujo completo):** el diagrama describe el sistema terminado. En la base actual, los nodos de validación (I1), publicación (I2), receptor/reparación (I3), aviso (I4) y worker (I5) todavía lanzan `NotImplementedError`; el receptor y el worker ya están cableados. La lista de funciones pendientes está en [`docs/ROLES.md`](docs/ROLES.md).
+> **Hito 4 (flujo completo):** el diagrama refleja el sistema ya integrado en `main`. Las funciones de negocio de los seis roles están implementadas y no queda ningún `NotImplementedError` en el código.
 
 ## 7. Contratos de entrada/salida
 
@@ -192,7 +192,7 @@ python -m fenix.cli send examples/node-event.json
 - Repetir el mismo evento (o reiniciar worker) no repite acciones ya verificadas: se consultan estados reales y se retoman pasos pendientes (ej. reenviar aviso sin re-reparar).
 - Mismo `event_id` con contenido distinto → conflicto registrado; conservar para DLQ; no alterar primer registro.
 
-## 11. Matriz de pruebas (F01–F16) — completar
+## 11. Matriz de pruebas (F01–F16)
 
 | ID | Caso | Preparación | Resultado esperado | Resultado obtenido | Evidencia | Responsable | Fecha |
 |---|---|---|---|---|---|---|---|
@@ -214,6 +214,8 @@ python -m fenix.cli send examples/node-event.json
 | F16 | Forzar rotación, leer `.gz`, parsear líneas | `RotatingFileHandler` reducido con `gzip_rotate` | JSON válido, UTC, contexto; sin secretos | `.jsonl.1.gz` con líneas JSON; timestamp UTC y solo campos autorizados | `tests/test_i4_observabilidad.py::test_rotacion_gzip_comprime_y_borra` | I4 | 2026-11-14 |
 
 > Automáticas sugeridas: F04,F05,F06,F07,F09,F11/F12,F16. Integración LocalStack: F01,F02,F03,F08,F10,F13.
+>
+> **Pendiente de evidencia:** las filas F02–F07 y F13 (I3) todavía tienen `_Completar_` en “Resultado obtenido”. Los casos F14/F15/F16 ya tienen resultado y test, pero falta adjuntar su archivo en `evidence/`. El código y las pruebas de todos esos casos ya están en `main`.
 >
 > **Cómo completar la matriz:** cada fila se cierra con un archivo en [`evidence/`](evidence/README.md) (fecha, comando, salida real sin secretos) y, si corresponde, una captura en `docs/images/`. **I6** custodia la matriz completa y valida la asignación de casos F; cada rol aporta la evidencia de sus funciones. No se completa con “funcionó”: hace falta comando + resultado.
 
@@ -366,7 +368,8 @@ fenix/
 │   ├── ROLES.md                  # Qué hace cada rol, archivos, pruebas y DoD
 │   ├── ENTORNO.md                # Instalación, LocalStack y problemas frecuentes
 │   ├── DECISIONES.md             # Decisiones de diseño y limitaciones
-│   └── GUIA_DEFENSA.md           # Guion del video y modificaciones en vivo
+│   ├── GUIA_DEFENSA.md           # Guion del video y modificaciones en vivo
+│   └── images/                   # Capturas anonimizadas referenciadas por las evidencias
 ├── evidence/                     # Evidencia reproducible F01–F16
 ├── examples/                     # Eventos de ejemplo firmables
 ├── scripts/
@@ -394,7 +397,13 @@ fenix/
 │   ├── test_base.py              # Apoyo del template (marca base)
 │   ├── test_contracts.py         # Contratos I1 (marca pendiente)
 │   ├── test_fenix.py             # HMAC sobre bytes crudos
-│   └── test_scenarios.py         # Escenarios e integración
+│   ├── test_i1_entradas.py       # I1: validación de entradas
+│   ├── test_i2_mensajeria.py     # I2: colas, inventario y backoff
+│   ├── test_i3_webhooks.py       # I3: receptor y reparación
+│   ├── test_i4_observabilidad.py # I4: avisos y logs JSON
+│   ├── test_i5_worker.py         # I5: worker, ACK y ledger
+│   ├── test_i6_diagnostico.py    # I6: inject_fault con fakes
+│   └── test_scenarios.py         # Escenarios F08/F10/F11/F12
 └── .github/
     ├── workflows/ci.yml          # Tests base + compose config + doctor
     └── pull_request_template.md  # Checklist de PR

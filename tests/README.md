@@ -17,6 +17,9 @@ Con LocalStack arriba, `pytest -q` deja **102 passed**.
 | `tests/test_i6_diagnostico.py` | unitarios con fakes | 9 |
 | `tests/test_scenarios.py` | 3 unitarios + 2 de integración | 5 |
 
+Las suites `test_contracts.py` y `test_fenix.py` conservan la marca `pendiente`
+del template, pero en `main` ya están implementadas y pasan.
+
 `tests/test_i6_diagnostico.py` cubre `inject_fault`: alias desconocido, tipo
 incorrecto, instancia ya terminada, límite de consultas, y las variantes de
 `bucket-01` (quitar `Owner`, idempotencia, grupo ajeno y bucket sin tags).
@@ -38,7 +41,7 @@ tres usan fakes y corren sin red.
 
 ```bash
 pytest -m base -q          # debe quedar verde siempre
-pytest -m pendiente -q     # contratos del equipo
+pytest -m pendiente -q     # contratos del template (hoy verdes)
 pytest -m integracion -q   # requiere LocalStack arriba
 pytest -q                  # todo
 ```
