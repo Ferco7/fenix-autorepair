@@ -449,6 +449,6 @@ hace con `docker compose up -d`.
 | [`evidence/README.md`](evidence/README.md) | Convención y plantilla de evidencia F01–F16 |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Ramas, commits, PR, reglas de código y revisión cruzada |
 
-> **Revisión cruzada obligatoria:** I1↔I6, I2↔I5, I3↔I4. Cada PR necesita al menos una aprobación registrada en GitHub antes del merge.
+> **Revisión cruzada obligatoria:** I1↔I6, I2↔I5, I3↔I4. Los PR de **código** necesitan al menos una aprobación cruzada registrada en GitHub antes del merge. Los PR de **documentación** puede mergearlos el coordinador con el CI en verde.
 >
 > **Repositorio:** `fenix-autorepair`. La publicación en GitHub se hace recién cuando la base local esté aprobada por el grupo.

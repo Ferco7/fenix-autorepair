@@ -281,8 +281,13 @@ resultado esperado, resultado obtenido y evidencia.
 | I5 | I2 |
 | I6 | I1 |
 
-Cada PR debe tener al menos **una aprobación** del compañero asignado antes del
-merge. La revisión se registra en GitHub; no alcanza con un comentario oral.
+Cada PR que cambia **código** debe tener al menos **una aprobación** del
+compañero asignado antes del merge. La revisión se registra en GitHub; no
+alcanza con un comentario oral.
+
+Los PR de **documentación** (README, `docs/`, `evidence/`) no requieren esa
+aprobación: los puede mergear el coordinador con el CI en verde. Si el PR mezcla
+código y documentación, se trata como PR de código.
 
 ## 6. Definición de terminado global
 
