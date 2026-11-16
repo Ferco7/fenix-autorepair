@@ -21,7 +21,7 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 | I3 - Webhooks y Reparación | Mamani, Hector Mauricio | maurobvx@gmail.com | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | `tests/test_i3_webhooks.py` (11 casos) |
 | I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | facundosebasalegre@gmail.com | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | `tests/test_i4_observabilidad.py` (26 casos) |
 | I5 - Integración y Worker | Rodríguez, Hector Fernando | elferchurodriguez08@gmail.com | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | `tests/test_i5_worker.py` (13 casos) |
-| I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | _Completar_ | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | _Completar_ |
+| I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | lautaro.lg48@gmail.com | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | `tests/test_i6_diagnostico.py` (9 casos) + `tests/test_scenarios.py` (5: 3 unitarios + 2 de integración) |
 
 > **Nota**: el correo es obligatorio en la entrega. Cada estudiante debe poder explicar y modificar su código, realizar commits propios y revisar al menos un módulo de otro compañero. La asignación operativa está en [`docs/ROLES.md`](docs/ROLES.md).
 
@@ -203,11 +203,11 @@ python -m fenix.cli send examples/node-event.json
 | F05 | Mismos datos, bytes distintos tras firmar | _Completar_ | 401 por HMAC inválida | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F06 | JSON roto firmado; lista JSON firmada | _Completar_ | 400 y 422; sin publicación | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F07 | Alias ajeno y claves extra | _Completar_ | Rechazo; ningún cambio cloud | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F08 | JSON corrupto inyectado directo a SQS | _Completar_ | Worker sigue; mensaje termina en DLQ | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F08 | JSON corrupto inyectado directo a SQS | `pytest tests/test_scenarios.py::test_redrive_with_localstack -v` con LocalStack | Worker sigue; mensaje termina en DLQ | `1 passed`; el `Body` corrupto `{esto no es json` se leyó desde la DLQ y el worker siguió vivo con la cola vacía | [`evidence/F08-json-corrupto-dlq.md`](evidence/F08-json-corrupto-dlq.md) | I6 | 2026-11-14 |
 | F09 | `simulate_failures=2` (ID nuevo) | `init-queues` + `setup-demo` + nodo detenido; evento con `event_id` nuevo a SQS | Backoff; luego reparación y ACK | 3 intentos: 1 y 2 `RetryableError` (visibilidad 2 s y 4 s); intento 3 `repair_done`/`notified`/`status=done`; nodo `running` por SDK; cola en 0 | [`evidence/F09-backoff-reintentos.md`](evidence/F09-backoff-reintentos.md) | I2 | 2026-11-14 |
 | F10 | Falla persistente (ID nuevo) | Colas propias `fenix-i2dlq-20261114` + `simulate_failures=5` | Sin ACK; derivación a DLQ | 3 intentos sin ACK; redrive a la DLQ; mensaje leído con `Body` original, `ApproximateReceiveCount=4` y `DeadLetterQueueSourceArn`; cola de trabajo en 0 | [`evidence/F10-lectura-dlq.md`](evidence/F10-lectura-dlq.md) | I2 | 2026-11-14 |
-| F11 | Repetir evento completo; reiniciar worker | _Completar_ | Sin nueva reparación ni aviso confirmado | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F12 | Cortar tras `repair_done` antes de `notify` | _Completar_ | Reinicio recupera solo aviso pendiente | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F11 | Repetir evento completo; reiniciar worker | `pytest tests/test_scenarios.py::test_duplicate_is_idempotent tests/test_scenarios.py::test_ack_is_after_success -v` | Sin nueva reparación ni aviso confirmado | `2 passed`; el segundo procesamiento no repara ni avisa; el ACK ocurre solo después del éxito | [`evidence/F11-duplicado-idempotente.md`](evidence/F11-duplicado-idempotente.md) | I6 | 2026-11-14 |
+| F12 | Cortar tras `repair_done` antes de `notify` | `pytest tests/test_scenarios.py::test_restart_after_repair_only_notifies -v` | Reinicio recupera solo aviso pendiente | `1 passed`; con `repair_done` ya registrado, el reinicio solo envía el aviso y no repite la reparación | [`evidence/F12-reinicio-solo-aviso.md`](evidence/F12-reinicio-solo-aviso.md) | I6 | 2026-11-14 |
 | F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F14 | Mock aviso 429/timeout luego éxito | `notify` con 429 y `handle` de nuevo | No repite reparación; reintenta aviso | 429 y timeout → `RetryableError`; reparación 1 vez; aviso confirmado en el segundo intento | `tests/test_i4_observabilidad.py::test_f14_429_no_repite_reparacion` + `::test_errores_de_red_son_reintentables` | I4 | 2026-11-14 |
 | F15 | Cambiar payload conservando `event_id` | `handle` dos veces con distinto contenido | Conflicto; no altera ledger/recursos originales | Conflicto en `_conflicts`; registro original y recursos intactos; sin ACK | `tests/test_i5_worker.py::test_handle_registra_conflicto_sin_cambiar_el_original` | I5 | 2026-11-13 |
@@ -402,38 +402,30 @@ fenix/
 
 ## 18. Estado por rol
 
-Todos los roles tienen su código integrado en `main` salvo I6, que todavía debe
-completar `inject_fault` y los escenarios de integración. No queda ningún
-`NotImplementedError` en la lógica de negocio de I1–I5.
+Todos los roles están integrados en `main` y no queda ningún
+`NotImplementedError` en la lógica de negocio.
 
 | Rol | Integrante | Módulos entregados | Estado |
 |---|---|---|---|
 | I1 | Herrera, Nancy Mariel | `utils/validation.py`, `utils/errors.py`, `services/events.py` | Integrado (#7) |
-| I2 | Maldonado, Fernando Manuel | `services/sqs.py`, `services/demo.py` (`setup_demo`) | Integrado (#1, #9) + evidencia F01/F09/F10 |
+| I2 | Maldonado, Fernando Manuel | `services/sqs.py`, `services/demo.py` (`setup_demo`) | Integrado (#1, #9) + evidencia F01/F09/F10 (#14) |
 | I3 | Mamani, Hector Mauricio | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` (`repair`) | Integrado (#12) |
 | I4 | Alegre, Facundo Sebastián | `utils/logging_json.py`, `services/notifications.py` | Integrado (#13) |
 | I5 | Rodríguez, Hector Fernando | `services/worker.py`, `services/remediation.py` (`handle`), `cli.py` | Integrado (#8, #10, #11) |
-| I6 | Gaspar, Lautaro Miguel Angel | `services/demo.py` (`inject_fault`), `tests/` | Pendiente: PR con F08/F10/F11/F12 |
+| I6 | Gaspar, Lautaro Miguel Angel | `services/demo.py` (`inject_fault`), `tests/` | Integrado (#15) |
 
-**Estado de la suite hoy (con LocalStack arriba):**
+**Estado de la suite (con LocalStack arriba):**
 
 | Comando | Resultado |
 |---|---|
 | `pytest -m base -q` | **4 passed** (apoyo del template) |
-| `pytest -q` | **88 passed, 3 failed** |
-| `pytest -q` sin LocalStack | 86 passed, 5 failed |
+| `pytest -q` | **102 passed** |
 
-Los 3 fallos son los stubs de I6 en `tests/test_scenarios.py`
-(`test_duplicate_is_idempotent`, `test_ack_is_after_success`,
-`test_redrive_with_localstack`). Sin LocalStack fallan además las 2 pruebas de
-integración de I2 (`test_ensure_queues_against_localstack`,
-`test_setup_demo_is_idempotent_against_localstack`), que necesitan el emulador.
+Sin LocalStack, las 4 pruebas de integración (2 de I2 y 2 de I6) no pueden
+correr y la suite queda en 98 passed, 4 failed. Por eso la corrida de cierre se
+hace con `docker compose up -d`.
 
-> Con el PR de I6 mergeado, la suite completa queda en **102 passed** (los 3
-> stubs pasan a pruebas reales más 9 tests nuevos y 2 escenarios adicionales).
-> Esa corrida ya fue verificada sobre `8c46caa` en un worktree aparte.
->
-> El orden de trabajo recomendado es I1 → I2 → I3 → I5 → I4 → I6. Detalle y
+> El orden de trabajo recomendado fue I1 → I2 → I3 → I5 → I4 → I6. Detalle y
 > definición de terminado en [`docs/ROLES.md`](docs/ROLES.md).
 
 ## 19. Documentación del equipo
