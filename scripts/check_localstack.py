@@ -52,6 +52,78 @@ def wait_state(ec2, instance_id: str, expected: str, tries: int = 15) -> bool:
     return False
 
 
+def _error_code(error: Exception) -> str:
+    """Devuelve el código de Boto3 sin exponer credenciales ni URLs."""
+    if isinstance(error, ClientError):
+        return error.response.get("Error", {}).get("Code", "ClientError")
+    return type(error).__name__
+
+
+def _terminate_instance(ec2, instance_id: str) -> bool:
+    """Termina la instancia efímera; informa si no pudo hacerlo."""
+    try:
+        ec2.terminate_instances(InstanceIds=[instance_id])
+        wait_state(ec2, instance_id, "terminated", tries=10)
+        return True
+    except (BotoCoreError, ClientError) as error:
+        print(f"[WARN] No se pudo terminar la instancia {instance_id}: {_error_code(error)}")
+        return False
+
+
+def _delete_security_group(ec2, group_id: str) -> bool:
+    """Borra el SG con reintentos acotados mientras EC2 libera la ENI."""
+    last_code = "ClientError"
+    for _ in range(10):
+        try:
+            ec2.delete_security_group(GroupId=group_id)
+            return True
+        except ClientError as error:
+            last_code = _error_code(error)
+            time.sleep(1)
+    print(f"[WARN] No se pudo eliminar el SG {group_id}: {last_code}")
+    return False
+
+
+def _delete_bucket(s3, bucket: str) -> bool:
+    """Borra el bucket efímero sin ocultar el error de Boto3."""
+    try:
+        s3.delete_bucket(Bucket=bucket)
+        return True
+    except ClientError as error:
+        print(f"[WARN] No se pudo eliminar el bucket {bucket}: {_error_code(error)}")
+        return False
+
+
+def _delete_queue(sqs, url: str) -> bool:
+    """Borra una cola efímera sin ocultar el error de Boto3."""
+    try:
+        sqs.delete_queue(QueueUrl=url)
+        return True
+    except ClientError as error:
+        print(f"[WARN] No se pudo eliminar la cola {url}: {_error_code(error)}")
+        return False
+
+
+def _cleanup(instance_id, group_id, bucket, work_url, dlq_url) -> int:
+    """Limpia los recursos del smoke y devuelve cuántos no pudo borrar."""
+    problems = 0
+    if instance_id and not _terminate_instance(client("ec2"), instance_id):
+        problems += 1
+    if group_id and not _delete_security_group(client("ec2"), group_id):
+        problems += 1
+    if bucket and not _delete_bucket(client("s3"), bucket):
+        problems += 1
+    if work_url and not _delete_queue(client("sqs"), work_url):
+        problems += 1
+    if dlq_url and not _delete_queue(client("sqs"), dlq_url):
+        problems += 1
+    if problems:
+        print(f"[WARN] Limpieza incompleta: {problems} recurso(s) sin eliminar")
+    else:
+        ok("Limpieza de recursos efímeros")
+    return problems
+
+
 def main() -> int:
     """Ejecuta el smoke y limpia los recursos creados."""
     os.chdir(ROOT)
@@ -158,34 +230,8 @@ def main() -> int:
         failures += 1
         fail("Smoke de LocalStack", error)
     finally:
-        # Limpieza acotada: nunca oculta el resultado original.
-        try:
-            if instance_id:
-                ec2 = client("ec2")
-                ec2.terminate_instances(InstanceIds=[instance_id])
-                wait_state(ec2, instance_id, "terminated", tries=10)
-            if group_id:
-                ec2 = client("ec2")
-                for _ in range(10):
-                    try:
-                        ec2.delete_security_group(GroupId=group_id)
-                        break
-                    except ClientError:
-                        time.sleep(1)
-            if bucket:
-                s3 = client("s3")
-                try:
-                    s3.delete_bucket(Bucket=bucket)
-                except ClientError:
-                    pass
-            if work_url:
-                client("sqs").delete_queue(QueueUrl=work_url)
-            if dlq_url:
-                client("sqs").delete_queue(QueueUrl=dlq_url)
-            print("[OK]   Limpieza de recursos efímeros")
-        except (ProjectError, BotoCoreError, ClientError, OSError) as cleanup_error:
-            failures += 1
-            fail("Limpieza incompleta (revisar recursos con prefijo " + prefix + ")", cleanup_error)
+        # Sin return, break ni continue: la limpieza informa y suma fallos.
+        failures += _cleanup(instance_id, group_id, bucket, work_url, dlq_url)
 
     print("\nResultado:", "smoke OK" if failures == 0 else f"{failures} fallo(s)")
     return 0 if failures == 0 else 1
