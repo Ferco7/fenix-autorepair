@@ -197,9 +197,9 @@ python -m fenix.cli send examples/node-event.json
 | ID | Caso | Preparación | Resultado esperado | Resultado obtenido | Evidencia | Responsable | Fecha |
 |---|---|---|---|---|---|---|---|
 | F01 | init-queues/setup-demo x2 | `init-queues` x2 + `setup-demo` x2 | Mismas colas/recursos; sin duplicados | Mismas URLs de cola; mismo `InstanceId`, SG y bucket; 0 duplicados | [`evidence/F01-init-queues-idempotente.md`](evidence/F01-init-queues-idempotente.md) | I2 | 2026-11-12 |
-| F02 | Nodo detenido → alerta válida | _Completar_ | Running verificado, ledger completo, aviso y ACK | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F03 | Bucket sin tag Owner | _Completar_ | Tags restauradas; ajenas preservadas | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F04 | Firma ausente/alterada/timestamp viejo | _Completar_ | 401; ningún mensaje nuevo | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F02 | Nodo detenido → alerta válida | `init-queues` + `setup-demo` + `fault node-01`; evento nuevo firmado: `cli send` + `worker --once` | Running verificado, ledger completo, aviso y ACK | Estado inicial `stopped`; `cli send` → 202 con `event_id`/`message_id`; el worker reparó (`repaired`) y confirmó (`acknowledged`); por SDK la instancia `i-9a6ddddbc0603ac1f` quedó `running`; ledger `attempts=1`, `repair_done`, `notified`, `status=done`; cola en 0; prueba automática `1 passed` | [`evidence/F02-nodo-detenido-reparado.md`](evidence/F02-nodo-detenido-reparado.md) · `tests/test_i3_webhooks.py::test_repair_starts_stopped_instance_and_rechecks_running` | I3 | 2026-11-16 |
+| F03 | Bucket sin tag Owner | `init-queues` + `setup-demo`; tag ajena `Ambiente` + `fault bucket-01`; evento nuevo firmado: `cli send` + `worker --once` | Tags restauradas; ajenas preservadas | Tags iniciales sin `Owner` y con `Ambiente=laboratorio`; `cli send` → 202; el worker reparó y confirmó; tags finales: las cuatro obligatorias más `Ambiente=laboratorio` intacta; ledger completo (`attempts=1`, `status=done`); cola en 0; prueba automática `1 passed` | [`evidence/F03-bucket-tags-restauradas.md`](evidence/F03-bucket-tags-restauradas.md) · `tests/test_i3_webhooks.py::test_repair_merges_tags_and_verifies_s3_result` | I3 | 2026-11-16 |
+| F04 | Firma ausente/alterada/timestamp viejo | Receptor en `:8000`; mismo cuerpo con firma ausente, un hex alterado y `t` de −600 s; `pytest tests/test_i3_webhooks.py -k "invalid_signature or strict_t_and_v1 or only_after_authentication" -v` | 401; ningún mensaje nuevo | Los 3 envíos respondieron `401 {"detail":"Firma de webhook inválida"}` (mismo detalle genérico); la cola quedó en 0/0/0 antes y después; el log de Uvicorn registra 3 × `401 Unauthorized`; pruebas automáticas `5 passed, 6 deselected` | [`evidence/F04-firma-invalida-401.md`](evidence/F04-firma-invalida-401.md) | I3 | 2026-11-16 |
 | F05 | Mismos datos, bytes distintos tras firmar | _Completar_ | 401 por HMAC inválida | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F06 | JSON roto firmado; lista JSON firmada | _Completar_ | 400 y 422; sin publicación | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
 | F07 | Alias ajeno y claves extra | _Completar_ | Rechazo; ningún cambio cloud | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
@@ -423,7 +423,7 @@ Todos los roles están integrados en `main` y no queda ningún
 |---|---|---|---|
 | I1 | Herrera, Nancy Mariel | `utils/validation.py`, `utils/errors.py`, `services/events.py` | Integrado (#7) |
 | I2 | Maldonado, Fernando Manuel | `services/sqs.py`, `services/demo.py` (`setup_demo`) | Integrado (#1, #9) + evidencia F01/F09/F10 (#14) |
-| I3 | Mamani, Hector Mauricio | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` (`repair`) | Integrado (#12) |
+| I3 | Mamani, Hector Mauricio | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` (`repair`) | Integrado (#12) + evidencia F02/F03/F04 |
 | I4 | Alegre, Facundo Sebastián | `utils/logging_json.py`, `services/notifications.py` | Integrado (#13) |
 | I5 | Rodríguez, Hector Fernando | `services/worker.py`, `services/remediation.py` (`handle`), `cli.py` | Integrado (#8, #10, #11) |
 | I6 | Gaspar, Lautaro Miguel Angel | `services/demo.py` (`inject_fault`), `tests/` | Integrado (#15) |

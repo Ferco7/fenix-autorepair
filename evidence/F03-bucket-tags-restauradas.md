@@ -1,6 +1,6 @@
 # F03 — Bucket sin tag Owner → etiquetas restauradas y ajenas preservadas
 
-- **Fecha:** 16/11/2026
+- **Fecha:** 16-11-2026
 - **Responsable:** I3 — Mamani, Hector Mauricio
 - **Rama / commit:** `main` = `a30b45b`
 - **Entorno:** Python 3.14.4 · LocalStack 3.8.0 · Docker 29.1.3
