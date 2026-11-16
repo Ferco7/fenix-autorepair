@@ -180,8 +180,10 @@ def check_localstack() -> None:
     services = health.get("services", {})
     required = ("sqs", "s3", "ec2")
     states = {name: services.get(name, "disabled") for name in required}
-    if all(state == "available" for state in states.values()):
-        report("OK", "LocalStack disponible: " + ", ".join(required))
+    healthy = {"available", "running"}  # 3.8 informa "running"; versiones nuevas "available".
+    if all(state in healthy for state in states.values()):
+        detail = ", ".join(f"{name}={states[name]}" for name in required)
+        report("OK", "LocalStack disponible: " + detail)
     else:
         report("FAIL", "Servicios no disponibles: " + json.dumps(states))
 

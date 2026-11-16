@@ -33,6 +33,9 @@ jobs:
       - name: Tests base
         run: python -m pytest -m base -q
 
+      - name: Suite sin LocalStack
+        run: python -m pytest -m "not integracion" -q
+
       - name: Validar compose
         run: |
           cp .env.example .env

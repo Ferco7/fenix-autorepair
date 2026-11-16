@@ -149,8 +149,8 @@ buckets: ['fenix-grupo01-demo']
   punto de control de una creación interrumpida. Los aliases `node-01` y
   `bucket-01` son los únicos recursos autorizados del inventario.
 - `data/inventory.json` es estado de runtime y está en `.gitignore`.
-- **Pendiente de I2 para completar el §3.2.2:** leer un mensaje real de la DLQ
-  sin eliminarlo antes de documentarlo. Requiere que I6 produzca el redrive con
-  un evento inválido o con `simulate_failures=5`; se documentará en F10.
-- F09 y F10 quedan pendientes de I3 (`repair`) e I4 (`notify`); el worker de
-  I5 ya está mergeado en `main`.
+- La lectura real de la DLQ quedó documentada en
+  [`F10-lectura-dlq.md`](F10-lectura-dlq.md): el mensaje se leyó sin eliminarlo
+  antes de documentarlo.
+- F09 (backoff 2/4) y F10 (derivación y lectura de la DLQ) se cerraron después
+  de esta corrida; ver sus archivos de evidencia.

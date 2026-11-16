@@ -53,8 +53,9 @@ Un commit = un cambio coherente. No mezclar refactors con features.
 1. Actualizar `main` y rebasar la rama.
 2. Correr `pytest -m base -q` y las pruebas del rol.
 3. Abrir el PR con la plantilla `.github/pull_request_template.md`.
-4. Pedir revisión cruzada (ver `docs/ROLES.md`).
-5. Mergear solo con la aprobación y el CI en verde.
+4. Pedir revisión cruzada si el PR cambia **código** (ver `docs/ROLES.md`).
+5. Mergear un PR de código solo con la aprobación cruzada y el CI en verde.
+   Un PR de **documentación** puede mergearlo el coordinador con el CI en verde.
 
 ## 5. Reglas de código
 

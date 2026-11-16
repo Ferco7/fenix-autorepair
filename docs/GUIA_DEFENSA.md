@@ -25,7 +25,7 @@ y demostrar el efecto.
 
 - **Contexto:** ninguna entrada inválida debe llegar a SQS.
 - **Mostrar:** `identifier`, `ttl_seconds`, `utc_text`, `validate`.
-- **Demo:** `pytest -m pendiente -q` antes/después; enviar un evento con alias
+- **Demo:** `pytest tests/test_i1_entradas.py -q`; enviar un evento con alias
   ajeno y mostrar 422.
 - **Modificación en vivo:** cambiar el regex para aceptar mayúsculas y mostrar
   que el contrato falla; agregar una clave extra y mostrar el rechazo.
@@ -102,7 +102,8 @@ y demostrar el efecto.
 - [ ] `pytest -m base` verde.
 - [ ] Suite del rol y casos F ejecutados con fecha y comando.
 - [ ] Capturas en `docs/images/` sin tokens ni chat IDs.
-- [ ] Mensaje real de Telegram/Slack (o justificación de `console`).
+- [ ] Mensaje real de Telegram con captura anonimizada; si el proveedor falla
+      durante la defensa, mostrar la evidencia previa y el adaptador con un mock.
 - [ ] Logs JSON y un archivo rotado `.gz` leído correctamente.
 - [ ] Matriz F01–F16 del README completa.
 - [ ] Video con marca de tiempo por integrante.

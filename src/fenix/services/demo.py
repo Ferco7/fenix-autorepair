@@ -1,10 +1,11 @@
 """Laboratorio acotado de recursos. Integrante 2 prepara, integrante 6 verifica."""
 import os  # Obtiene la región usada por el emulador.
+import time  # Acota las consultas de estado tras detener la instancia.
 from botocore.exceptions import ClientError  # Distingue etiquetas ausentes.
 from fenix.config.settings import client
 from fenix.utils.state import load, save
 from fenix.utils.validation import identifier
-from fenix.utils.errors import PermanentError
+from fenix.utils.errors import PermanentError, RetryableError, ValidationError
 from fenix.services.cloud_support import (
     aws_tags, create_bucket, create_group, create_instance, mock_inputs,
 )
@@ -208,6 +209,91 @@ def setup_demo(group: str) -> dict:
     return inventory
 
 
+STOP_ATTEMPTS = 15  # Consultas acotadas después de stop_instances.
+STOP_DELAY = 0.5  # Segundos entre consultas; no espera indefinida.
+
+
+def _fault_instance(resource: dict) -> None:
+    """Detiene la instancia del alias y verifica el estado final.
+
+    Args:
+        resource: Registro node-01 del inventario con su InstanceId real.
+    Returns:
+        None solo cuando EC2 informa el estado stopped.
+    Raises:
+        ValidationError: Si el registro no contiene un InstanceId válido.
+        PermanentError: Si la instancia no existe o queda en un estado terminal.
+        RetryableError: Si no llega a stopped dentro del plazo acotado.
+        ClientError: Si EC2 rechaza la detención o una consulta.
+    Side Effects:
+        Detiene únicamente la instancia indicada por el inventario.
+    """
+    instance_id = resource.get("id")
+    if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+        raise ValidationError("El inventario no tiene un InstanceId válido")
+
+    ec2 = client("ec2")
+    ec2.stop_instances(InstanceIds=[instance_id])  # El alias ya resolvió el ID.
+    for _ in range(STOP_ATTEMPTS):  # Consultas limitadas, sin bucle infinito.
+        reservations = ec2.describe_instances(
+            InstanceIds=[instance_id])["Reservations"]
+        instances = [item for reservation in reservations
+                     for item in reservation["Instances"]]
+        if not instances:
+            raise PermanentError("La instancia del inventario no existe")
+        state = instances[0]["State"]["Name"]
+        if state == "stopped":
+            return  # El fallo quedó verificado mediante el SDK.
+        if state in ("stopping", "pending", "running"):
+            time.sleep(STOP_DELAY)  # La transición todavía no terminó.
+            continue
+        raise PermanentError(f"La instancia quedó en estado {state}")
+    raise RetryableError("La instancia no llegó a stopped dentro del plazo")
+
+
+def _fault_bucket(resource: dict, group: str | None) -> None:
+    """Quita Owner del bucket propio conservando el resto de las etiquetas.
+
+    Args:
+        resource: Registro bucket-01 del inventario con su nombre real.
+        group: Identificador del grupo dueño, leído de la clave _lab.
+    Returns:
+        None cuando Owner ya no está presente; repetir no cambia nada.
+    Raises:
+        ValidationError: Si el registro no contiene un nombre de bucket válido.
+        PermanentError: Si el bucket no pertenece al grupo o no tiene etiquetas.
+        RetryableError: Si Owner reaparece después de la escritura.
+        ClientError: Si S3 rechaza una lectura o escritura de etiquetas.
+    Side Effects:
+        Reemplaza las etiquetas del bucket sin tocar otras claves.
+    """
+    bucket = resource.get("id")
+    if not isinstance(bucket, str) or not bucket:
+        raise ValidationError("El inventario no tiene un bucket válido")
+
+    s3 = client("s3")
+    try:
+        current = {tag["Key"]: tag["Value"]
+                   for tag in s3.get_bucket_tagging(Bucket=bucket)["TagSet"]}
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "NoSuchTagSet":
+            raise  # Un error distinto de "sin etiquetas" no se oculta.
+        current = {}
+    if (current.get("ManagedBy") != "ppa2" or current.get("Project") != "fenix"
+            or current.get("GroupId") != group):
+        raise PermanentError("El bucket no pertenece al grupo del inventario")
+    if "Owner" not in current:
+        return  # Ya está en el estado de falla; no se reescriben etiquetas.
+
+    remaining = [{"Key": key, "Value": value}
+                 for key, value in current.items() if key != "Owner"]
+    s3.put_bucket_tagging(Bucket=bucket, Tagging={"TagSet": remaining})
+    stored = {tag["Key"] for tag in
+              s3.get_bucket_tagging(Bucket=bucket)["TagSet"]}
+    if "Owner" in stored:
+        raise RetryableError("La etiqueta Owner sigue presente")
+
+
 def inject_fault(alias: str) -> None:
     """Detiene el nodo o elimina una etiqueta del bucket de laboratorio.
 
@@ -217,12 +303,24 @@ def inject_fault(alias: str) -> None:
         None cuando el fallo simulado se verifica mediante el SDK.
     Raises:
         ValidationError: Si el alias no pertenece al inventario.
-        NotImplementedError: Mientras falte TODO I6-A.
+        PermanentError: Si el recurso no pertenece al grupo o no existe.
+        RetryableError: Si el estado de falla todavía no se observa.
+        ClientError: Si EC2 o S3 rechazan una operación.
     Side Effects:
         Modifica únicamente el recurso de prueba de ese grupo.
+    Notes:
+        Esta función fabrica el problema; no debe enviar el evento automáticamente.
     """
-    # TODO I6-A: resolver el alias en inventario; jamás recibir InstanceId libre.
-    # node-01: stop_instances y comprobar stopped, con consultas limitadas.
-    # bucket-01: quitar Owner conservando el resto de etiquetas.
-    # Esta función fabrica el problema; no debe enviar el evento automáticamente.
-    raise NotImplementedError("I6-A: inyectar y comprobar fallo")
+    inventory = load(INVENTORY_PATH)  # El alias se resuelve siempre aquí.
+    resource = inventory.get(alias)
+    if not isinstance(resource, dict):
+        raise ValidationError("El alias no pertenece al inventario")
+
+    kind = resource.get("type")
+    if alias == "node-01" and kind == "ec2":
+        _fault_instance(resource)
+        return
+    if alias == "bucket-01" and kind == "s3":
+        _fault_bucket(resource, inventory.get("_lab", {}).get("group"))
+        return
+    raise ValidationError("El alias no corresponde a un recurso conocido")

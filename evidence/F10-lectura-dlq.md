@@ -5,6 +5,10 @@
 - **Rama / commit:** `rol2-evidencias` / commit que acompaña este archivo
 - **Entorno:** Python 3.14.4 · LocalStack 3.8.0 · Docker 29.1.3 · Linux 7.0.0 x86_64
 
+> Esta evidencia cubre la corrida manual y la lectura real de la DLQ. La parte
+> automática del mismo caso está en
+> [`F10-falla-persistente-dlq.md`](F10-falla-persistente-dlq.md).
+
 ## Preparación
 
 ```bash

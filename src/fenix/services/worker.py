@@ -81,7 +81,7 @@ def run(url: str, handler, logger, once: bool = False) -> None:
                 time.sleep(2)
             else:
                 logger.info("mensaje_confirmado",
-                            extra={**context, "status": "ok"})
+                            extra={**context, "status": "acknowledged"})
 
         if once:
             return
