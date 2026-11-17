@@ -168,7 +168,7 @@ def test_handle_es_idempotente(tmp_path, monkeypatch):
     preparar(tmp_path, monkeypatch)
     calls = {"repair": 0, "notify": 0}
 
-    def fake_repair(resource, event_type):
+    def fake_repair(resource, event_type, event_id=None):
         calls["repair"] += 1
         return "repaired"
 
@@ -192,7 +192,7 @@ def test_handle_es_idempotente(tmp_path, monkeypatch):
 def test_handle_respeta_simulate_failures(tmp_path, monkeypatch):
     """simulate_failures=2 agota dos intentos antes de reparar."""
     preparar(tmp_path, monkeypatch)
-    monkeypatch.setattr(remediation, "repair", lambda resource, event_type: "repaired")
+    monkeypatch.setattr(remediation, "repair", lambda resource, event_type, event_id=None: "repaired")
     monkeypatch.setattr(remediation, "notify", lambda text: None)
     evento = dict(EVENT, simulate_failures=2)
 
@@ -219,7 +219,7 @@ def test_handle_al_reiniciar_solo_notifica(tmp_path, monkeypatch):
     }})
     calls = {"repair": 0, "notify": 0}
 
-    def fake_repair(resource, event_type):
+    def fake_repair(resource, event_type, event_id=None):
         calls["repair"] += 1
         return "repaired"
 
@@ -239,7 +239,7 @@ def test_handle_al_reiniciar_solo_notifica(tmp_path, monkeypatch):
 def test_handle_rechaza_event_id_reutilizado(tmp_path, monkeypatch):
     """Mismo event_id con otro contenido es un error permanente."""
     preparar(tmp_path, monkeypatch)
-    monkeypatch.setattr(remediation, "repair", lambda resource, event_type: "repaired")
+    monkeypatch.setattr(remediation, "repair", lambda resource, event_type, event_id=None: "repaired")
     monkeypatch.setattr(remediation, "notify", lambda text: None)
 
     remediation.handle(dict(EVENT))
@@ -253,7 +253,7 @@ def test_handle_registra_conflicto_sin_cambiar_el_original(tmp_path, monkeypatch
     preparar(tmp_path, monkeypatch)
     calls = {"repair": 0, "notify": 0}
 
-    def fake_repair(resource, event_type):
+    def fake_repair(resource, event_type, event_id=None):
         calls["repair"] += 1
         return "repaired"
 
@@ -283,7 +283,7 @@ def test_handle_preserva_otros_eventos(tmp_path, monkeypatch):
     """Actualizar un evento no borra los demás del ledger."""
     preparar(tmp_path, monkeypatch)
     save("data/events.json", {"otro-evento": {"content": "x"}})
-    monkeypatch.setattr(remediation, "repair", lambda resource, event_type: "repaired")
+    monkeypatch.setattr(remediation, "repair", lambda resource, event_type, event_id=None: "repaired")
     monkeypatch.setattr(remediation, "notify", lambda text: None)
 
     remediation.handle(dict(EVENT))

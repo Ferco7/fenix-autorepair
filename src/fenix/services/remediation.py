@@ -1,5 +1,6 @@
 """Acciones convergentes a completar por integrante 3 y coordinadas por 5."""
 import json  #vincula cada event_id con el contenido exacto recibido
+import logging  #Registra cada paso con el mismo sink JSON del worker
 from datetime import datetime,timezone #Marca UTC del conflicto registrado
 from fenix.config.settings import client
 from fenix.utils.state import load, save
@@ -10,6 +11,13 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 INVENTORY_PATH = "data/inventory.json" #Ruta compartida con receptor y worker.
 LEDGER_PATH = "data/events.json" #Estado durable por event_id.
+
+_LOG = logging.getLogger("fenix-worker")  #La CLI configura este nombre con JSON.
+
+
+def _log(level: int, message: str, **fields) -> None:
+    """Registra un paso con los campos públicos del formatter JSON."""
+    _LOG.log(level, message, extra=fields)
 
 
 TRANSIENT_CODES = {
@@ -69,12 +77,13 @@ def _required_tags(resource: dict) -> dict[str, str]:
     return dict(tags)
 
 
-def repair(resource: dict, event_type: str) -> str:
+def repair(resource: dict, event_type: str, event_id: str | None = None) -> str:
     """Acerca un recurso autorizado a su estado deseado y verifica el resultado.
 
     Args:
         resource: Registro de inventario con type/id y etiquetas esperadas.
         event_type: instance.stopped o bucket.tags_missing ya validado.
+        event_id: Identificador de negocio para correlacionar los logs.
     Returns:
         "repaired" si cambió el estado; "already_ok" si ya cumplía la política.
     Raises:
@@ -92,6 +101,9 @@ def repair(resource: dict, event_type: str) -> str:
     if not isinstance(resource_id, str) or not resource_id:
         raise PermanentError("El recurso del inventario no tiene un ID válido")
 
+    _log(logging.INFO, "repair_started", event_id=event_id,
+         resource_id=resource_id, action=event_type, status="started")
+
     if event_type == "instance.stopped":
         if resource.get("type") != "ec2":
             raise PermanentError("El evento no corresponde al recurso autorizado")
@@ -99,6 +111,9 @@ def repair(resource: dict, event_type: str) -> str:
             ec2 = client("ec2")
             state = _instance_state(ec2, resource_id)
             if state == "running":
+                _log(logging.DEBUG, "repair_already_ok", event_id=event_id,
+                     resource_id=resource_id, action=event_type,
+                     status="already_ok")
                 return "already_ok"
             if state == "pending":
                 raise RetryableError("La instancia todavía está iniciando")
@@ -110,6 +125,9 @@ def repair(resource: dict, event_type: str) -> str:
             ec2.start_instances(InstanceIds=[resource_id])
             if _instance_state(ec2, resource_id) != "running":
                 raise RetryableError("La instancia aún no está en ejecución")
+            _log(logging.INFO, "repair_verified", event_id=event_id,
+                 resource_id=resource_id, action=event_type,
+                 status="repaired")
             return "repaired"
         except ClientError as error:
             _raise_classified(error)
@@ -125,6 +143,9 @@ def repair(resource: dict, event_type: str) -> str:
             current = _bucket_tags(s3, resource_id)
             desired = {**current, **required}  # Conserva todas las etiquetas ajenas.
             if current == desired:
+                _log(logging.DEBUG, "repair_already_ok", event_id=event_id,
+                     resource_id=resource_id, action=event_type,
+                     status="already_ok")
                 return "already_ok"
             s3.put_bucket_tagging(Bucket=resource_id, Tagging={
                 "TagSet": [{"Key": key, "Value": value}
@@ -132,6 +153,9 @@ def repair(resource: dict, event_type: str) -> str:
             stored = _bucket_tags(s3, resource_id)
             if stored != desired:
                 raise RetryableError("Las etiquetas aún no se pueden verificar")
+            _log(logging.INFO, "repair_verified", event_id=event_id,
+                 resource_id=resource_id, action=event_type,
+                 status="repaired")
             return "repaired"
         except ClientError as error:
             _raise_classified(error)
@@ -164,6 +188,9 @@ def handle(event: dict) -> None:
     validated = validate(event, inventory)  # Revalida aunque venga de SQS.
     event_id = validated["event_id"]
     content = json.dumps(validated, sort_keys=True, ensure_ascii=False)
+    context = {"event_id": event_id, "resource_id": validated["resource_id"],
+               "action": validated["event_type"]}
+    _log(logging.INFO, "event_received", status="received", **context)
 
     ledger = load(LEDGER_PATH)
     record = ledger.get(event_id)
@@ -180,11 +207,13 @@ def handle(event: dict) -> None:
                 "registered_at": datetime.now(timezone.utc).isoformat(),
             })
             save(LEDGER_PATH, ledger)  # Solo agrega el conflicto; no toca record.
+            _log(logging.WARNING, "event_conflict", status="conflict", **context)
             raise PermanentError("event_id reutilizado con otro contenido")
         if record.get("repair_done") and record.get("notified"):
             if record.get("status") != "done":  # Completa un ledger viejo.
                 record["status"] = "done"
                 save(LEDGER_PATH, ledger)
+            _log(logging.INFO, "event_duplicate_skipped", status="done", **context)
             return  # Nada pendiente: no repetir acciones ya verificadas.
     else:
         record = {
@@ -200,19 +229,28 @@ def handle(event: dict) -> None:
     record["attempts"] = int(record.get("attempts", 0)) + 1
     record["status"] = "retrying"
     save(LEDGER_PATH, ledger)  # attempts durable antes de cualquier efecto.
+    _log(logging.INFO, "attempt_registered", attempt=record["attempts"],
+         status="retrying", **context)
 
     if record["attempts"] <= validated["simulate_failures"]:
+        _log(logging.WARNING, "simulated_failure", attempt=record["attempts"],
+             status="retrying", **context)
         raise RetryableError("Falla simulada pendiente de reintento")
 
     resource = inventory[validated["resource_id"]]
 
     if not record.get("repair_done"):
-        record["repair_result"] = repair(resource, validated["event_type"])
+        record["repair_result"] = repair(resource, validated["event_type"],
+                                         event_id=event_id)
         record["repair_done"] = True
         record["status"] = "repaired"
         save(LEDGER_PATH, ledger)  # Reparación durable antes de notificar.
+        _log(logging.INFO, "repair_done", attempt=record["attempts"],
+             status="repaired", **context)
 
     if not record.get("notified"):
+        _log(logging.INFO, "notify_started", attempt=record["attempts"],
+             status="notifying", **context)
         notify(
             f"Evento {event_id}: {validated['event_type']} en "
             f"{validated['resource_id']} -> "
@@ -221,6 +259,10 @@ def handle(event: dict) -> None:
         record["notified"] = True
         record["status"] = "done"
         save(LEDGER_PATH, ledger)
+        _log(logging.INFO, "notify_confirmed", attempt=record["attempts"],
+             status="done", **context)
 
     record["status"] = "done"
     save(LEDGER_PATH, ledger)
+    _log(logging.INFO, "event_done", attempt=record["attempts"],
+         status="done", **context)

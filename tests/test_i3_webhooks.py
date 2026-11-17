@@ -119,7 +119,6 @@ def _prepare_receiver(monkeypatch, *, publish_result="msg-001") -> list[dict]:
     return sent
 
 
-@pytest.mark.pendiente
 def test_webhook_rejects_invalid_signature_without_publishing(api_client, monkeypatch):
     """F04: una firma inválida responde 401 y nunca llega a SQS."""
     sent = _prepare_receiver(monkeypatch)
@@ -131,7 +130,6 @@ def test_webhook_rejects_invalid_signature_without_publishing(api_client, monkey
     assert sent == []
 
 
-@pytest.mark.pendiente
 @pytest.mark.parametrize("header", [
     "t=1000,t=1000,v1=" + "0" * 64,
     "t=1000,v1=" + "0" * 63,
@@ -143,7 +141,6 @@ def test_verify_requires_one_strict_t_and_v1(header):
         verify(SECRET, header, b"{}", now=1000)
 
 
-@pytest.mark.pendiente
 def test_webhook_parses_json_only_after_authentication(api_client, monkeypatch):
     """JSON roto pero firmado es 400; no firmado permanece opaco como 401."""
     sent = _prepare_receiver(monkeypatch)
@@ -157,7 +154,6 @@ def test_webhook_parses_json_only_after_authentication(api_client, monkeypatch):
     assert sent == []
 
 
-@pytest.mark.pendiente
 def test_webhook_rejects_contract_and_unavailable_queue(api_client, monkeypatch):
     """El contrato es 422 y una publicación sin confirmar es 503, nunca 202."""
     sent = _prepare_receiver(monkeypatch)
@@ -176,7 +172,6 @@ def test_webhook_rejects_contract_and_unavailable_queue(api_client, monkeypatch)
     assert response.status_code == 503
 
 
-@pytest.mark.pendiente
 def test_webhook_returns_202_only_after_sqs_message_id(api_client, monkeypatch):
     """La respuesta transporta el contexto de correlación del evento y de SQS."""
     sent = _prepare_receiver(monkeypatch)
@@ -188,7 +183,6 @@ def test_webhook_returns_202_only_after_sqs_message_id(api_client, monkeypatch):
     assert sent == [EVENT]
 
 
-@pytest.mark.pendiente
 def test_webhook_limits_body_before_authentication(api_client, monkeypatch):
     """El límite se aplica aunque el atacante no conozca el secreto."""
     sent = _prepare_receiver(monkeypatch)
@@ -235,7 +229,6 @@ class FakeS3:
         return {}
 
 
-@pytest.mark.pendiente
 def test_repair_starts_stopped_instance_and_rechecks_running(monkeypatch):
     """F02: stopped -> start_instances -> describe = running por API."""
     ec2 = FakeEC2("stopped")
@@ -247,7 +240,6 @@ def test_repair_starts_stopped_instance_and_rechecks_running(monkeypatch):
     assert ec2.state == "running"
 
 
-@pytest.mark.pendiente
 def test_repair_merges_tags_and_verifies_s3_result(monkeypatch):
     """F03: agrega las obligatorias, conserva ajenas y relee el bucket."""
     s3 = FakeS3({"Foreign": "keep", "ManagedBy": "ppa2"})
@@ -259,7 +251,6 @@ def test_repair_merges_tags_and_verifies_s3_result(monkeypatch):
     assert s3.reads == 2
 
 
-@pytest.mark.pendiente
 def test_repair_classifies_instance_state(monkeypatch):
     """pending se reintenta y terminated no puede repararse con un start."""
     pending = FakeEC2("pending")

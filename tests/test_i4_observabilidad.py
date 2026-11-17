@@ -99,9 +99,14 @@ def test_telegram_json_ilegible_es_permanente(monkeypatch):
         notifications.notify("aviso")
 
 
-@pytest.mark.parametrize("error", [requests.Timeout(), requests.ConnectionError()])
+@pytest.mark.parametrize("error", [
+    requests.Timeout(),
+    requests.ConnectionError(),
+    requests.exceptions.ChunkedEncodingError(),
+    requests.exceptions.TooManyRedirects(),
+])
 def test_errores_de_red_son_reintentables(monkeypatch, error):
-    """Timeout y conexión se traducen a RetryableError."""
+    """Cualquier RequestException se traduce a RetryableError."""
     preparar_telegram(monkeypatch)
 
     def fake_post(*args, **kwargs):
@@ -287,6 +292,29 @@ def test_setup_escribe_json_con_contexto(tmp_path, monkeypatch):
     assert fila["attempt"] == 1
 
 
+def test_niveles_debug_y_critical_se_serializan(tmp_path, monkeypatch):
+    """El pipeline conserva los cinco niveles exigidos por la consigna."""
+    monkeypatch.chdir(tmp_path)
+    logger, listener = logging_json.setup("fenix-i4-niveles")
+    try:
+        logger.debug("decision interna", extra={"event_id": "evt-dbg",
+                                                "status": "already_ok"})
+        logger.info("paso nominal", extra={"event_id": "evt-inf"})
+        logger.warning("reintento", extra={"event_id": "evt-warn", "attempt": 1})
+        logger.error("fallo temporal", extra={"event_id": "evt-err",
+                                              "status": "retrying"})
+        logger.critical("configuracion invalida", extra={"status": "fatal"})
+    finally:
+        listener.stop()
+
+    archivo = next((tmp_path / "logs").glob("*.jsonl"))
+    filas = [json.loads(linea) for linea in
+             archivo.read_text(encoding="utf-8").splitlines()]
+    assert {fila["level"] for fila in filas} == {
+        "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    assert all(fila["timestamp"].endswith("+00:00") for fila in filas)
+
+
 def test_rotacion_gzip_comprime_y_borra(tmp_path):
     """Al rotar, el histórico queda comprimido y el original desaparece."""
     destino = tmp_path / "app.jsonl"
@@ -337,7 +365,7 @@ def test_f14_429_no_repite_reparacion(tmp_path, monkeypatch):
 
     llamadas = {"repair": 0, "notify": 0}
 
-    def fake_repair(resource, event_type):
+    def fake_repair(resource, event_type, event_id=None):
         llamadas["repair"] += 1
         return "repaired"
 

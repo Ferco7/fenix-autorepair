@@ -69,7 +69,7 @@ def _telegram(text: str) -> None:
             json={"chat_id": chat_id, "text": text},
             timeout=TIMEOUT,
         )
-    except (requests.Timeout, requests.ConnectionError):
+    except requests.RequestException:
         raise RetryableError("No se pudo contactar a Telegram") from None
 
     _check(response)  # 429 y 5xx se resuelven antes de leer el cuerpo.
@@ -97,7 +97,7 @@ def _slack(text: str) -> None:
 
     try:
         response = requests.post(url, json={"text": text}, timeout=TIMEOUT)
-    except (requests.Timeout, requests.ConnectionError):
+    except requests.RequestException:
         raise RetryableError("No se pudo contactar a Slack") from None
 
     _check(response)

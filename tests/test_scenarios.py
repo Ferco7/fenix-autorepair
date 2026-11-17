@@ -60,7 +60,7 @@ def test_duplicate_is_idempotent(tmp_path, monkeypatch):
     preparar(tmp_path, monkeypatch)
     llamadas = {"repair": 0, "notify": 0}
 
-    def fake_repair(resource, event_type):
+    def fake_repair(resource, event_type, event_id=None):
         llamadas["repair"] += 1
         return "repaired"
 
@@ -118,7 +118,7 @@ def test_restart_after_repair_only_notifies(tmp_path, monkeypatch):
     }})
     llamadas = {"repair": 0, "notify": 0}
 
-    def fake_repair(resource, event_type):
+    def fake_repair(resource, event_type, event_id=None):
         llamadas["repair"] += 1
         return "repaired"
 

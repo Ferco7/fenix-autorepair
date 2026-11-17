@@ -60,7 +60,6 @@ def fake_sqs(monkeypatch):
     return fake
 
 
-@pytest.mark.pendiente
 def test_ensure_queues_creates_dlq_first_and_forces_redrive(fake_sqs):
     """Crea la DLQ antes que la cola principal y fuerza la RedrivePolicy.
 
@@ -90,10 +89,11 @@ def test_ensure_queues_creates_dlq_first_and_forces_redrive(fake_sqs):
         "deadLetterTargetArn": "arn:aws:sqs:us-east-1:000000000000:fenix-i2-dlq",
         "maxReceiveCount": 3,
     }
+    assert fake_sqs.calls[3][2]["VisibilityTimeout"] == "45"
+    assert fake_sqs.calls[3][2]["MessageRetentionPeriod"] == "345600"
     assert fake_sqs.calls[3][2]["RedrivePolicy"] == attributes["RedrivePolicy"]
 
 
-@pytest.mark.pendiente
 def test_ensure_queues_is_idempotent(fake_sqs):
     """Repetir la preparación conserva las mismas URLs y no duplica colas.
 
@@ -109,7 +109,6 @@ def test_ensure_queues_is_idempotent(fake_sqs):
     assert sorted(fake_sqs.queues) == ["fenix-i2-dlq", "fenix-i2-events"]
 
 
-@pytest.mark.pendiente
 @pytest.mark.parametrize(
     ("count", "expected"),
     [("1", 2), ("2", 4), ("3", 8), ("10", 30)],
@@ -136,6 +135,21 @@ def test_retry_later_applies_bounded_backoff(fake_sqs, count, expected):
     assert seconds == expected
     assert fake_sqs.calls == [
         ("change_message_visibility", "http://localhost:4566/q", "rh-1", expected)
+    ]
+
+
+def test_retry_later_tolera_contador_malformado(fake_sqs):
+    """Un atributo raro no debe tumbar el worker al reprogramar."""
+    message = {
+        "ReceiptHandle": "rh-1",
+        "Attributes": {"ApproximateReceiveCount": "abc"},
+    }
+
+    seconds = sqs_module.retry_later("http://localhost:4566/q", message)
+
+    assert seconds == 2
+    assert fake_sqs.calls == [
+        ("change_message_visibility", "http://localhost:4566/q", "rh-1", 2)
     ]
 
 
@@ -190,7 +204,6 @@ def test_ensure_queues_against_localstack():
                     )
 
 
-@pytest.mark.pendiente
 def test_setup_demo_rejects_inventory_from_another_group(tmp_path, monkeypatch):
     """No reutiliza un inventario que pertenece a otro grupo.
 
@@ -210,6 +223,16 @@ def test_setup_demo_rejects_inventory_from_another_group(tmp_path, monkeypatch):
 
     with pytest.raises(PermanentError):
         demo_module.setup_demo("grupo-01")
+
+
+def test_setup_demo_rechaza_inventario_que_no_es_objeto(tmp_path, monkeypatch):
+    """Un JSON válido con forma de lista se rechaza sin AttributeError."""
+    path = tmp_path / "inventory.json"
+    path.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(demo_module, "INVENTORY_PATH", str(path))
+
+    with pytest.raises(PermanentError):
+        demo_module.setup_demo("grupo01")
 
 
 def _cleanup_lab(ec2, s3, inventory: dict) -> None:

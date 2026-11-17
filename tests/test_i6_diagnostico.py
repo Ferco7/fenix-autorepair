@@ -157,3 +157,50 @@ def test_bucket01_sin_tags_no_se_modifica(tmp_path, monkeypatch):
     with pytest.raises(PermanentError):
         demo_module.inject_fault("bucket-01")
     assert s3.puts == []
+
+
+class FakeS3Parcial:
+    """Bucket creado sin etiquetas; la segunda corrida debe completarlas."""
+
+    def __init__(self):
+        self.buckets = []
+        self.tags = {}
+
+    def list_buckets(self):
+        return {"Buckets": [{"Name": name} for name in self.buckets]}
+
+    def get_bucket_tagging(self, Bucket):
+        if Bucket not in self.tags:
+            raise ClientError({"Error": {"Code": "NoSuchTagSet"}},
+                              "GetBucketTagging")
+        return {"TagSet": [{"Key": key, "Value": value}
+                           for key, value in self.tags[Bucket].items()]}
+
+    def put_bucket_tagging(self, Bucket, Tagging):
+        self.tags[Bucket] = {tag["Key"]: tag["Value"]
+                             for tag in Tagging["TagSet"]}
+        return {}
+
+
+def test_bucket_creado_sin_tags_se_recupera(monkeypatch):
+    """Un fallo parcial al etiquetar no obliga a crear otro bucket."""
+    fake = FakeS3Parcial()
+    tags = {"ManagedBy": "ppa2", "Project": "fenix",
+            "GroupId": "grupo01", "Owner": "grupo01"}
+
+    def crear_sin_etiquetar(name, _tags):
+        fake.buckets.append(name)
+        raise ClientError({"Error": {"Code": "InternalError"}},
+                          "PutBucketTagging")
+
+    monkeypatch.setattr(demo_module, "create_bucket", crear_sin_etiquetar)
+    with pytest.raises(ClientError):
+        demo_module._ensure_bucket(fake, "bucket-fenix", "grupo01", tags)
+    assert fake.buckets == ["bucket-fenix"]
+
+    monkeypatch.setattr(
+        demo_module, "create_bucket",
+        lambda *args: (_ for _ in ()).throw(AssertionError("no debe crear")))
+    assert demo_module._ensure_bucket(
+        fake, "bucket-fenix", "grupo01", tags) == "bucket-fenix"
+    assert fake.tags["bucket-fenix"] == tags

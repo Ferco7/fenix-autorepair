@@ -169,6 +169,8 @@ def setup_demo(group: str) -> dict:
     """
     group = identifier(group)  # Rechaza grupos fuera del contrato de I1.
     inventory = load(INVENTORY_PATH)
+    if not isinstance(inventory, dict):  # Un JSON válido pero de otra forma no sirve.
+        raise PermanentError("data/inventory.json debe ser un objeto JSON")
     lab = inventory.get("_lab", {})
     if lab.get("group") not in (None, group):
         raise PermanentError("data/inventory.json pertenece a otro grupo")
@@ -312,6 +314,8 @@ def inject_fault(alias: str) -> None:
         Esta función fabrica el problema; no debe enviar el evento automáticamente.
     """
     inventory = load(INVENTORY_PATH)  # El alias se resuelve siempre aquí.
+    if not isinstance(inventory, dict):  # Evita AttributeError con una lista.
+        raise PermanentError("data/inventory.json debe ser un objeto JSON")
     resource = inventory.get(alias)
     if not isinstance(resource, dict):
         raise ValidationError("El alias no pertenece al inventario")

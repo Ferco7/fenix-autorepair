@@ -3,7 +3,6 @@ import pytest  # Ejecuta los escenarios parametrizados.
 from fenix.utils.validation import identifier, ttl_seconds, utc_text
 from fenix.utils.errors import ValidationError
 
-@pytest.mark.pendiente
 def test_identifier_contract():
     """Exige conservar un ID válido y rechazar rutas o mayúsculas.
 
@@ -17,7 +16,6 @@ def test_identifier_contract():
     with pytest.raises(ValidationError):  # Bloquea rutas no autorizadas.
         identifier("../AJENO")  # Entrada maliciosa didáctica.
 
-@pytest.mark.pendiente
 def test_ttl_contract():
     """Comprueba límites incluidos y el rechazo de un TTL excesivo.
 
@@ -32,7 +30,6 @@ def test_ttl_contract():
     with pytest.raises(ValidationError):  # No se redondean entradas.
         ttl_seconds("601")  # Supera el presupuesto didáctico.
 
-@pytest.mark.pendiente
 def test_utc_contract():
     """Exige que las fechas de expiración tengan UTC explícito.
 

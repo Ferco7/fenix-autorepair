@@ -29,8 +29,11 @@ def ensure_queues(prefix: str) -> tuple[str, str]:
         "MessageRetentionPeriod": "345600",  # Cuatro días de trabajo.
         "RedrivePolicy": policy,  # Deriva a la DLQ tras tres recepciones.
     })["QueueUrl"]  # La URL sale de la respuesta, no se construye a mano.
-    sqs.set_queue_attributes(QueueUrl=work,
-        Attributes={"RedrivePolicy": policy})  # Fuerza la política si ya existía.
+    sqs.set_queue_attributes(QueueUrl=work, Attributes={
+        "VisibilityTimeout": "45",  # Reconcilia una cola creada antes.
+        "MessageRetentionPeriod": "345600",
+        "RedrivePolicy": policy,  # Fuerza la política si ya existía.
+    })
     return work, dead  # Orden acordado: cola de trabajo primero.
 
 
@@ -124,7 +127,10 @@ def retry_later(url: str, message: dict) -> int:
     Side Effects:
         Cambia la visibilidad; RedrivePolicy sigue controlando la DLQ.
     """
-    count = int(message["Attributes"]["ApproximateReceiveCount"])  # Cuenta de SQS.
+    try:
+        count = int(message["Attributes"]["ApproximateReceiveCount"])  # Cuenta de SQS.
+    except (KeyError, TypeError, ValueError):
+        count = 1  # Un atributo raro no impide reintentar el mensaje.
     seconds = min(30, 2 ** count)  # 2, 4, 8... con tope de 30 segundos.
     client("sqs").change_message_visibility(  # Reutiliza la misma entrega.
         QueueUrl=url, ReceiptHandle=message["ReceiptHandle"],

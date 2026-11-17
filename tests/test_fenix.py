@@ -3,7 +3,6 @@ import pytest  # Verifica la excepción pública de autenticación.
 from fenix.utils.crypto import signature, verify
 from fenix.utils.errors import ValidationError
 
-@pytest.mark.pendiente
 def test_signature_authenticates_raw_bytes():
     """Acepta el original y rechaza la misma información con otros bytes.
 
