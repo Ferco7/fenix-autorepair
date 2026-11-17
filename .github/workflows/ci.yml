@@ -45,3 +45,42 @@ jobs:
         env:
           WEBHOOK_SECRET: ci-secret-0123456789abcdef
         run: python scripts/doctor.py
+
+  integracion:
+    name: Integración con LocalStack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: base
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Instalar paquete
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Preparar .env de CI
+        run: |
+          cp .env.example .env
+          sed -i 's/^WEBHOOK_SECRET=$/WEBHOOK_SECRET=ci-secret-0123456789abcdef/' .env
+
+      - name: Levantar LocalStack
+        run: docker compose up -d --wait
+
+      - name: Tests de integración
+        run: python -m pytest -m integracion -q
+
+      - name: Diagnóstico con LocalStack
+        run: python scripts/doctor.py
+
+      - name: Bajar LocalStack
+        if: always()
+        run: docker compose down -v
