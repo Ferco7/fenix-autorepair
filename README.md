@@ -2,7 +2,7 @@
 
 Sistema que recibe una alerta de laboratorio mediante un **webhook autenticado**, la guarda en **SQS**, repara un recurso emulado por **Boto3/LocalStack** y comunica el resultado a **Telegram o Slack**.
 
-> Estado: **sistema completo e integrado**. La suite da **108 passed** con LocalStack y el CI está en verde. La matriz F01–F16 está cerrada; quedan los entregables grupales (video y declaración de IA); ver §15–§16.
+> Estado: **sistema completo e integrado**. La suite da **108 passed** con LocalStack y el CI está en verde. La matriz F01–F16 está cerrada; quedan el video, la declaración de IA y la verificación desde un clon limpio.
 
 ## 1. Objetivo del sistema
 
@@ -412,7 +412,7 @@ fenix/
 │   ├── test_i6_diagnostico.py    # I6: inject_fault con fakes
 │   └── test_scenarios.py         # Escenarios F08/F10/F11/F12
 └── .github/
-    ├── workflows/ci.yml          # Tests base + suite sin LocalStack + compose + doctor
+    ├── workflows/ci.yml          # Tests base + integración con LocalStack + compose + doctor
     └── pull_request_template.md  # Checklist de PR
 ```
 

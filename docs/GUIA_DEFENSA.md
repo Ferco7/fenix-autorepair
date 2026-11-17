@@ -99,12 +99,14 @@ y demostrar el efecto.
 
 ## 5. Checklist de evidencias
 
-- [ ] `pytest -m base` verde.
-- [ ] Suite del rol y casos F ejecutados con fecha y comando.
-- [ ] Capturas en `docs/images/` sin tokens ni chat IDs.
-- [ ] Mensaje real de Telegram con captura anonimizada; si el proveedor falla
+- [x] `pytest -m base` verde.
+- [x] Suite del rol y casos F ejecutados con fecha y comando.
+- [x] Captura de Telegram anonimizada en `docs/images/`; las demás evidencias
+      son salidas de terminal reproducibles.
+- [x] Mensaje real de Telegram con captura anonimizada; si el proveedor falla
       durante la defensa, mostrar la evidencia previa y el adaptador con un mock.
-- [ ] Logs JSON y un archivo rotado `.gz` leído correctamente.
-- [ ] Matriz F01–F16 del README completa.
+- [x] Logs JSON y un archivo rotado `.gz` leído correctamente.
+- [x] Matriz F01–F16 del README completa.
+- [ ] Verificación desde un clon limpio: instalación, `doctor.py` y suite completa.
 - [ ] Video con marca de tiempo por integrante.
 - [ ] Declaración de IA completa.
