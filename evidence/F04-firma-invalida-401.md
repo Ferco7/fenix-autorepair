@@ -1,9 +1,9 @@
 # F04 — Firma ausente, alterada o con timestamp viejo: 401 y sin publicación
 
-- **Fecha:** 16-11-2026
+- **Fecha:** 2026-11-17
 - **Responsable:** I3 — Mamani, Hector Mauricio
-- **Rama / commit:** `main` = `a30b45b`
-- **Entorno:** Python 3.14.4 · LocalStack 3.8.0 · Docker 29.1.3
+- **Rama / commit:** `fix/tandas-0-3` / commit que acompaña este archivo
+- **Entorno:** Python 3.14.4 · LocalStack 3.8.0 · Docker 29.1.3 · Linux x86_64
 
 ## Preparación
 
@@ -69,13 +69,13 @@ body = json.dumps(event).encode("utf-8")
 
 valid = signature(secret, now, body)
 tampered = valid[:-1] + ("0" if valid[-1] != "0" else "1")  # un solo hex distinto
-old = now - 600  # fuera de la ventana de 300 s, pero con firma correcta para ese t
+old = now - 3600  # fuera de la ventana de 300 s, pero con firma correcta para ese t
 old_valid = signature(secret, old, body)
 
 print("cola antes:  ", pending())
 post("1 firma ausente        ", {})
 post("2 firma alterada       ", {"X-Webhook-Signature": f"t={now},v1={tampered}"})
-post("3 timestamp viejo -600s", {"X-Webhook-Signature": f"t={old},v1={old_valid}"})
+post("3 timestamp viejo -3600s", {"X-Webhook-Signature": f"t={old},v1={old_valid}"})
 print("cola después:", pending())
 PY
 ```
@@ -92,40 +92,39 @@ publicó ningún mensaje.
 ### Pruebas automáticas
 
 ```text
-========================================= test session starts ==========================================
-platform win32 -- Python 3.14.4, pytest-9.2.0, pluggy-1.7.0 -- 
-..\fenix-autorepair\venv\Scripts\python.exe
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.2.0, pluggy-1.7.0 -- .venv/bin/python
 cachedir: .pytest_cache
-rootdir: ..\fenix-autorepair
+rootdir: .
 configfile: pyproject.toml
 plugins: anyio-4.16.0
-collected 11 items / 6 deselected / 5 selected                                                          
+collecting ... collected 11 items / 6 deselected / 5 selected
 
-tests/test_i3_webhooks.py::test_webhook_rejects_invalid_signature_without_publishing PASSED       [ 20%]
+tests/test_i3_webhooks.py::test_webhook_rejects_invalid_signature_without_publishing PASSED [ 20%]
 tests/test_i3_webhooks.py::test_verify_requires_one_strict_t_and_v1[t=1000,t=1000,v1=0000000000000000000000000000000000000000000000000000000000000000] PASSED [ 40%]
 tests/test_i3_webhooks.py::test_verify_requires_one_strict_t_and_v1[t=1000,v1=000000000000000000000000000000000000000000000000000000000000000] PASSED [ 60%]
 tests/test_i3_webhooks.py::test_verify_requires_one_strict_t_and_v1[t=abc,v1=0000000000000000000000000000000000000000000000000000000000000000] PASSED [ 80%]
-tests/test_i3_webhooks.py::test_webhook_parses_json_only_after_authentication PASSED              [100%]
+tests/test_i3_webhooks.py::test_webhook_parses_json_only_after_authentication PASSED [100%]
 
-=================================== 5 passed, 6 deselected in 1.02s ====================================
+======================= 5 passed, 6 deselected in 0.21s ========================
 ```
 
 ### Corrida real
 
 ```text
 cola antes:   {"ApproximateNumberOfMessages": "0", "ApproximateNumberOfMessagesNotVisible": "0", "ApproximateNumberOfMessagesDelayed": "0"}
-1 firma ausente        : HTTP 401 {"detail":"Firma de webhook inválida"}
-2 firma alterada       : HTTP 401 {"detail":"Firma de webhook inválida"}
-3 timestamp viejo -600s: HTTP 401 {"detail":"Firma de webhook inválida"}
+1 firma ausente         : HTTP 401 {"detail":"Firma de webhook inválida"}
+2 firma alterada        : HTTP 401 {"detail":"Firma de webhook inválida"}
+3 timestamp viejo -3600s: HTTP 401 {"detail":"Firma de webhook inválida"}
 cola después: {"ApproximateNumberOfMessages": "0", "ApproximateNumberOfMessagesNotVisible": "0", "ApproximateNumberOfMessagesDelayed": "0"}
 ```
 
 ### Log de acceso del receptor
 
 ```text
-INFO:     127.0.0.1:63455 - "POST /webhook HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:63456 - "POST /webhook HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:63457 - "POST /webhook HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:40762 - "POST /webhook HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:40776 - "POST /webhook HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:40786 - "POST /webhook HTTP/1.1" 401 Unauthorized
 ```
 
 ## Qué verifica cada prueba

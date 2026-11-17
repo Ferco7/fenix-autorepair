@@ -2,7 +2,7 @@
 
 Sistema que recibe una alerta de laboratorio mediante un **webhook autenticado**, la guarda en **SQS**, repara un recurso emulado por **Boto3/LocalStack** y comunica el resultado a **Telegram o Slack**.
 
-> Estado: **sistema completo e integrado**. La suite da **102 passed** con LocalStack y el CI está en verde. Quedan pendientes evidencias de algunos casos de la matriz y los entregables grupales (video, aviso real y declaración de IA); ver §11 y §15–§16.
+> Estado: **sistema completo e integrado**. La suite da **108 passed** con LocalStack y el CI está en verde. La matriz F01–F16 está cerrada; quedan los entregables grupales (video y declaración de IA); ver §15–§16.
 
 ## 1. Objetivo del sistema
 
@@ -17,17 +17,17 @@ Flujo: `POST /webhook` (HMAC, raw bytes) → validación + publicación en SQS (
 | Rol | Apellido y nombre | Correo | Módulos principales | Pruebas defendidas |
 |---|---|---|---|---|
 | I1 - Entradas y Excepciones | Herrera, Nancy Mariel | nancy506herre@gmail.com | `src/fenix/utils/validation.py`, `src/fenix/utils/errors.py`, `src/fenix/services/events.py` | tests/test_i1_entradas.py (21 tests de validación y rechazo de entradas) |
-| I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | bynanofer@gmail.com | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | `tests/test_i2_mensajeria.py` (9: 7 unitarios + 2 de integración) + `tests/test_scenarios.py::test_redrive_with_localstack` (custodia I6) |
+| I2 - Mensajería e Inventario Cloud | Maldonado, Fernando Manuel | bynanofer@gmail.com | `src/fenix/services/sqs.py`, `src/fenix/services/demo.py` | `tests/test_i2_mensajeria.py` (11: 9 unitarios + 2 de integración) + `tests/test_scenarios.py::test_redrive_with_localstack` (custodia I6) |
 | I3 - Webhooks y Reparación | Mamani, Hector Mauricio | maurobvx@gmail.com | `src/fenix/utils/crypto.py`, `src/fenix/services/receiver.py`, `src/fenix/services/remediation.py` (`repair`) | `tests/test_i3_webhooks.py` (11 casos) |
-| I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | facundosebasalegre@gmail.com | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | `tests/test_i4_observabilidad.py` (26 casos) |
+| I4 - Observabilidad y Comunicación | Alegre, Facundo Sebastián | facundosebasalegre@gmail.com | `src/fenix/utils/logging_json.py`, `src/fenix/services/notifications.py` | `tests/test_i4_observabilidad.py` (29 casos) |
 | I5 - Integración y Worker | Rodríguez, Hector Fernando | elferchurodriguez08@gmail.com | `src/fenix/services/worker.py`, `src/fenix/services/remediation.py` (`handle`), `src/fenix/cli.py` | `tests/test_i5_worker.py` (13 casos) |
-| I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | lautaro.lg48@gmail.com | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | `tests/test_i6_diagnostico.py` (9 casos) + `tests/test_scenarios.py` (5: 3 unitarios + 2 de integración) |
+| I6 - Pruebas y Diagnóstico | Gaspar, Lautaro Miguel Angel | lautaro.lg48@gmail.com | `tests/`, `src/fenix/services/demo.py` (`inject_fault`) | `tests/test_i6_diagnostico.py` (10 casos) + `tests/test_scenarios.py` (5: 3 unitarios + 2 de integración) |
 
 > **Nota**: el correo es obligatorio en la entrega. Cada estudiante debe poder explicar y modificar su código, realizar commits propios y revisar al menos un módulo de otro compañero. La asignación operativa está en [`docs/ROLES.md`](docs/ROLES.md).
 
 ## 3. Prerrequisitos y versiones
 
-- Python **3.14.4** (misma versión para todo el grupo; mínimo admitido 3.11)
+- Python **3.14.4** (misma versión para todo el grupo; mínimo admitido 3.11). La evidencia F15 se tomó con 3.14.5 en Windows; no cambia dependencias ni resultados.
 - Docker Engine 29+ y Docker Compose 2.40+
 - LocalStack **3.8.0** (imagen Community del Lab-1, **sin token**) con `sqs,s3,ec2` y `EC2_VM_MANAGER=mock`
 - Dependencias: `boto3`, `fastapi`, `uvicorn`, `requests`, `python-dotenv`, `pytest`, `httpx` (versiones exactas en `requirements-lock.txt`)
@@ -196,26 +196,28 @@ python -m fenix.cli send examples/node-event.json
 
 | ID | Caso | Preparación | Resultado esperado | Resultado obtenido | Evidencia | Responsable | Fecha |
 |---|---|---|---|---|---|---|---|
-| F01 | init-queues/setup-demo x2 | `init-queues` x2 + `setup-demo` x2 | Mismas colas/recursos; sin duplicados | Mismas URLs de cola; mismo `InstanceId`, SG y bucket; 0 duplicados | [`evidence/F01-init-queues-idempotente.md`](evidence/F01-init-queues-idempotente.md) | I2 | 2026-11-12 |
+| F01 | init-queues/setup-demo x2 | `init-queues` x2 + `setup-demo` x2 | Mismas colas/recursos; sin duplicados | Mismas URLs de cola; mismo `InstanceId`, SG y bucket; 0 duplicados | [`evidence/F01-init-queues-idempotente.md`](evidence/F01-init-queues-idempotente.md) | I2 | 2026-11-13 |
 | F02 | Nodo detenido → alerta válida | `init-queues` + `setup-demo` + `fault node-01`; evento nuevo firmado: `cli send` + `worker --once` | Running verificado, ledger completo, aviso y ACK | Estado inicial `stopped`; `cli send` → 202 con `event_id`/`message_id`; el worker reparó (`repaired`) y confirmó (`acknowledged`); por SDK la instancia `i-9a6ddddbc0603ac1f` quedó `running`; ledger `attempts=1`, `repair_done`, `notified`, `status=done`; cola en 0; prueba automática `1 passed` | [`evidence/F02-nodo-detenido-reparado.md`](evidence/F02-nodo-detenido-reparado.md) · `tests/test_i3_webhooks.py::test_repair_starts_stopped_instance_and_rechecks_running` | I3 | 2026-11-16 |
 | F03 | Bucket sin tag Owner | `init-queues` + `setup-demo`; tag ajena `Ambiente` + `fault bucket-01`; evento nuevo firmado: `cli send` + `worker --once` | Tags restauradas; ajenas preservadas | Tags iniciales sin `Owner` y con `Ambiente=laboratorio`; `cli send` → 202; el worker reparó y confirmó; tags finales: las cuatro obligatorias más `Ambiente=laboratorio` intacta; ledger completo (`attempts=1`, `status=done`); cola en 0; prueba automática `1 passed` | [`evidence/F03-bucket-tags-restauradas.md`](evidence/F03-bucket-tags-restauradas.md) · `tests/test_i3_webhooks.py::test_repair_merges_tags_and_verifies_s3_result` | I3 | 2026-11-16 |
-| F04 | Firma ausente/alterada/timestamp viejo | Receptor en `:8000`; mismo cuerpo con firma ausente, un hex alterado y `t` de −600 s; `pytest tests/test_i3_webhooks.py -k "invalid_signature or strict_t_and_v1 or only_after_authentication" -v` | 401; ningún mensaje nuevo | Los 3 envíos respondieron `401 {"detail":"Firma de webhook inválida"}` (mismo detalle genérico); la cola quedó en 0/0/0 antes y después; el log de Uvicorn registra 3 × `401 Unauthorized`; pruebas automáticas `5 passed, 6 deselected` | [`evidence/F04-firma-invalida-401.md`](evidence/F04-firma-invalida-401.md) | I3 | 2026-11-16 |
-| F05 | Mismos datos, bytes distintos tras firmar | _Completar_ | 401 por HMAC inválida | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F06 | JSON roto firmado; lista JSON firmada | _Completar_ | 400 y 422; sin publicación | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F07 | Alias ajeno y claves extra | _Completar_ | Rechazo; ningún cambio cloud | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F04 | Firma ausente/alterada/timestamp viejo | Receptor en `:8000`; mismo cuerpo con firma ausente, un hex alterado y `t` de −3600 s; `pytest tests/test_i3_webhooks.py -k "invalid_signature or strict_t_and_v1 or only_after_authentication" -v` | 401; ningún mensaje nuevo | Los 3 envíos respondieron `401 {"detail":"Firma de webhook inválida"}` (mismo detalle genérico); la cola quedó en 0/0/0 antes y después; el log de Uvicorn registra 3 × `401 Unauthorized`; pruebas automáticas `5 passed, 6 deselected` | [`evidence/F04-firma-invalida-401.md`](evidence/F04-firma-invalida-401.md) | I3 | 2026-11-17 |
+| F05 | Mismos datos, bytes distintos tras firmar | Receptor en `:8000`; se firma `{"x":1}` y se envía `{"x": 1}` con esa firma | 401 por HMAC inválida | `401 {"detail":"Firma de webhook inválida"}`; cola en 0 antes y después; sin `MessageId` porque no hubo publicación | [`evidence/F05-bytes-distintos-401.md`](evidence/F05-bytes-distintos-401.md) | I3 | 2026-11-17 |
+| F06 | JSON roto firmado; lista JSON firmada | Receptor en `:8000`; cuerpo incompleto y lista JSON con firma válida | 400 y 422; sin publicación | `400 {"detail":"JSON inválido"}` para el JSON roto y `422 {"detail":"Evento no válido"}` para la lista; cola en 0 antes y después | [`evidence/F06-json-invalido-400-422.md`](evidence/F06-json-invalido-400-422.md) | I3 | 2026-11-17 |
+| F07 | Alias ajeno y claves extra | Receptor en `:8000`; evento firmado con `resource_id=node-99` y variante con clave `extra` | Rechazo; ningún cambio cloud | Ambos envíos respondieron `422 {"detail":"Evento no válido"}`; cola en 0; no hubo cambios en EC2/S3 porque no se publicó ningún mensaje | [`evidence/F07-alias-claves-422.md`](evidence/F07-alias-claves-422.md) | I3 | 2026-11-17 |
 | F08 | JSON corrupto inyectado directo a SQS | `pytest tests/test_scenarios.py::test_redrive_with_localstack -v` con LocalStack | Worker sigue; mensaje termina en DLQ | `1 passed`; el `Body` corrupto `{esto no es json` se leyó desde la DLQ y el worker siguió vivo con la cola vacía | [`evidence/F08-json-corrupto-dlq.md`](evidence/F08-json-corrupto-dlq.md) | I6 | 2026-11-14 |
 | F09 | `simulate_failures=2` (ID nuevo) | `init-queues` + `setup-demo` + nodo detenido; evento con `event_id` nuevo a SQS | Backoff; luego reparación y ACK | 3 intentos: 1 y 2 `RetryableError` (visibilidad 2 s y 4 s); intento 3 `repair_done`/`notified`/`status=done` con `acknowledged`; nodo `running` por SDK; cola en 0 | [`evidence/F09-backoff-reintentos.md`](evidence/F09-backoff-reintentos.md) | I2 | 2026-11-15 |
 | F10 | Falla persistente (ID nuevo) | Colas propias `fenix-i2dlq-20261114` + `simulate_failures=5` | Sin ACK; derivación a DLQ | 3 intentos sin ACK; redrive a la DLQ; mensaje leído con `Body` original, `ApproximateReceiveCount=4` y `DeadLetterQueueSourceArn`; cola de trabajo en 0 | [`F10-lectura-dlq.md`](evidence/F10-lectura-dlq.md) · [`F10-falla-persistente-dlq.md`](evidence/F10-falla-persistente-dlq.md) | I2 | 2026-11-14 |
 | F11 | Repetir evento completo; reiniciar worker | `pytest tests/test_scenarios.py::test_duplicate_is_idempotent tests/test_scenarios.py::test_ack_is_after_success -v` | Sin nueva reparación ni aviso confirmado | `2 passed`; el segundo procesamiento no repara ni avisa; el ACK ocurre solo después del éxito | [`evidence/F11-duplicado-idempotente.md`](evidence/F11-duplicado-idempotente.md) | I6 | 2026-11-14 |
 | F12 | Cortar tras `repair_done` antes de `notify` | `pytest tests/test_scenarios.py::test_restart_after_repair_only_notifies -v` | Reinicio recupera solo aviso pendiente | `1 passed`; con `repair_done` ya registrado, el reinicio solo envía el aviso y no repite la reparación | [`evidence/F12-reinicio-solo-aviso.md`](evidence/F12-reinicio-solo-aviso.md) | I6 | 2026-11-14 |
-| F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
+| F13 | SQS detenido al recibir webhook | Receptor en `:8000`; `docker compose stop localstack`; evento válido firmado | 503; no aceptación falsa | `503 {"detail":"Cola no disponible"}` y ningún 202; después se reinició LocalStack | [`evidence/F13-sqs-caido-503.md`](evidence/F13-sqs-caido-503.md) | I2 | 2026-11-17 |
 | F14 | Mock aviso 429/timeout luego éxito | `notify` con 429 y `handle` de nuevo | No repite reparación; reintenta aviso | `3 passed`; 429 y timeout → `RetryableError`, reparación 1 vez y aviso confirmado en el reintento; incluye el envío real por Telegram | [`evidence/F14-429-timeout.md`](evidence/F14-429-timeout.md) | I4 | 2026-11-17 |
-| F15 | Cambiar payload conservando `event_id` | `handle` dos veces con distinto contenido | Conflicto; no altera ledger/recursos originales | Conflicto en `_conflicts`; registro original y recursos intactos; sin ACK | `tests/test_i5_worker.py::test_handle_registra_conflicto_sin_cambiar_el_original` | I5 | 2026-11-13 |
+| F15 | Cambiar payload conservando `event_id` | `handle` dos veces con distinto contenido | Conflicto; no altera ledger/recursos originales | Conflicto en `_conflicts`; registro original y recursos intactos; sin ACK | [`evidence/F15-conflicto-event-id.md`](evidence/F15-conflicto-event-id.md) · `tests/test_i5_worker.py::test_handle_registra_conflicto_sin_cambiar_el_original` | I5 | 2026-11-13 |
 | F16 | Forzar rotación, leer `.gz`, parsear líneas | `RotatingFileHandler` reducido con `gzip_rotate` | JSON válido, UTC, contexto; sin secretos | `1 passed`; `.jsonl.1.gz` adjunto (4 líneas) con timestamp UTC y solo campos autorizados | [`evidence/F16-rotacion-gzip.md`](evidence/F16-rotacion-gzip.md) | I4 | 2026-11-17 |
 
 > Automáticas sugeridas: F04,F05,F06,F07,F09,F11/F12,F16. Integración LocalStack: F01,F02,F03,F08,F10,F13.
 >
-> **Pendiente de evidencia:** las filas F02–F07 y F13 (I3) todavía tienen `_Completar_` en “Resultado obtenido”. Los casos F14/F15/F16 ya tienen resultado y test, pero falta adjuntar su archivo en `evidence/`. El código y las pruebas de todos esos casos ya están en `main`.
+> **Cobertura de la matriz:** F01–F16 tienen archivo en [`evidence/`](evidence/README.md) con comando y salida real. F01 incluye además la recuperación de un bucket creado sin etiquetas. Los tests unitarios corren sin red; las corridas reales de F01–F13 requieren LocalStack y, para F04–F07 y F13, el receptor en `:8000`.
+>
+> **Observabilidad (O1/O2):** los logs JSON de un evento nominal y de un mensaje corrupto están en [`evidence/O1-logs.md`](evidence/O1-logs.md) (con los `.jsonl` adjuntos), y los cinco niveles en [`evidence/O2-niveles-log.md`](evidence/O2-niveles-log.md). El worker registra cada paso con `event_id`, `attempt` y `status`.
 >
 > **Cómo completar la matriz:** cada fila se cierra con un archivo en [`evidence/`](evidence/README.md) (fecha, comando, salida real sin secretos) y, si corresponde, una captura en `docs/images/`. **I6** custodia la matriz completa y valida la asignación de casos F; cada rol aporta la evidencia de sus funciones. No se completa con “funcionó”: hace falta comando + resultado.
 
@@ -238,7 +240,7 @@ python -m fenix.cli send examples/node-event.json
 **Evidencia de envío real (I4 - Alegre, Facundo Sebastián):**
 
 - Estado: **Enviado** el 2026-11-16.
-- El código de `notify` está implementado y probado con mocks (26 tests passed en `tests/test_i4_observabilidad.py`).
+- El código de `notify` está implementado y probado con mocks (29 tests passed en `tests/test_i4_observabilidad.py`).
 - Captura anonimizada: [`docs/images/evidencia-telegram-i4.png`](docs/images/evidencia-telegram-i4.png); recortada para excluir chats de terceros y con el token de la URL y el identificador del chat tapados.
 - Comando usado (carga `.env` explícitamente porque `notifications.py` no lo hace solo):
   ```bash
@@ -400,7 +402,7 @@ fenix/
 │       └── logging_json.py       # Logs JSON con rotación (apoyo)
 ├── tests/
 │   ├── test_base.py              # Apoyo del template (marca base)
-│   ├── test_contracts.py         # Contratos I1 (marca pendiente)
+│   ├── test_contracts.py         # Contratos I1 (sin marca)
 │   ├── test_fenix.py             # HMAC sobre bytes crudos
 │   ├── test_i1_entradas.py       # I1: validación de entradas
 │   ├── test_i2_mensajeria.py     # I2: colas, inventario y backoff
@@ -422,21 +424,21 @@ Todos los roles están integrados en `main` y no queda ningún
 | Rol | Integrante | Módulos entregados | Estado |
 |---|---|---|---|
 | I1 | Herrera, Nancy Mariel | `utils/validation.py`, `utils/errors.py`, `services/events.py` | Integrado (#7) |
-| I2 | Maldonado, Fernando Manuel | `services/sqs.py`, `services/demo.py` (`setup_demo`) | Integrado (#1, #9) + evidencia F01/F09/F10 (#14) |
-| I3 | Mamani, Hector Mauricio | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` (`repair`) | Integrado (#12) + evidencia F02/F03/F04 |
-| I4 | Alegre, Facundo Sebastián | `utils/logging_json.py`, `services/notifications.py` | Integrado (#13) |
-| I5 | Rodríguez, Hector Fernando | `services/worker.py`, `services/remediation.py` (`handle`), `cli.py` | Integrado (#8, #10, #11) |
-| I6 | Gaspar, Lautaro Miguel Angel | `services/demo.py` (`inject_fault`), `tests/` | Integrado (#15) |
+| I2 | Maldonado, Fernando Manuel | `services/sqs.py`, `services/demo.py` (`setup_demo`) | Integrado (#1, #9) + evidencia F01/F09/F10/F13 (#14) |
+| I3 | Mamani, Hector Mauricio | `utils/crypto.py`, `services/receiver.py`, `services/remediation.py` (`repair`) | Integrado (#12) + evidencia F02–F07 |
+| I4 | Alegre, Facundo Sebastián | `utils/logging_json.py`, `services/notifications.py` | Integrado (#13) + evidencia F14/F16/O1/O2 |
+| I5 | Rodríguez, Hector Fernando | `services/worker.py`, `services/remediation.py` (`handle`), `cli.py` | Integrado (#8, #10, #11) + evidencia F15 |
+| I6 | Gaspar, Lautaro Miguel Angel | `services/demo.py` (`inject_fault`), `tests/` | Integrado (#15) + evidencia F08/F11/F12 |
 
 **Estado de la suite (con LocalStack arriba):**
 
 | Comando | Resultado |
 |---|---|
 | `pytest -m base -q` | **4 passed** (apoyo del template) |
-| `pytest -q` | **102 passed** |
+| `pytest -q` | **108 passed** |
 
 Sin LocalStack, las 4 pruebas de integración (2 de I2 y 2 de I6) no pueden
-correr y la suite queda en 98 passed, 4 failed. Por eso la corrida de cierre se
+correr y la suite queda en 104 passed, 4 failed. Por eso la corrida de cierre se
 hace con `docker compose up -d`.
 
 > El orden de trabajo recomendado fue I1 → I2 → I3 → I5 → I4 → I6. Detalle y

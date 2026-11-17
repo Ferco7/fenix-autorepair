@@ -128,6 +128,29 @@ instancias grupo01: 1 ['i-148d6b01c3c367ecb']
 buckets: ['fenix-grupo01-demo']
 ```
 
+## Fallo parcial: bucket creado sin etiquetas
+
+Si `PutBucketTagging` falla después de `CreateBucket`, una segunda corrida no
+debe intentar crear otro bucket: reconcilia las etiquetas del existente. El
+caso se cubre con un fake porque el emulador no permite inyectar ese fallo a
+mitad de camino.
+
+```bash
+pytest tests/test_i6_diagnostico.py::test_bucket_creado_sin_tags_se_recupera -v
+```
+
+Salida real:
+
+```text
+tests/test_i6_diagnostico.py::test_bucket_creado_sin_tags_se_recupera PASSED [100%]
+
+============================== 1 passed in 0.08s ===============================
+```
+
+El test crea el bucket sin tags, fuerza un `ClientError` en el primer
+etiquetado y comprueba que la segunda llamada reutiliza el mismo nombre y
+completa las cuatro etiquetas obligatorias.
+
 ## Evidencia
 
 - La salida real está transcripta arriba; no se adjunta captura de pantalla.

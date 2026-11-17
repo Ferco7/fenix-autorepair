@@ -7,7 +7,7 @@ problemas típicos del laboratorio.
 
 | Herramienta | Versión usada | Nota |
 |---|---|---|
-| Python | **3.14.4** | Misma versión para todo el grupo (mínimo 3.11) |
+| Python | **3.14.4** | Misma versión para todo el grupo (mínimo 3.11). F15 se ejecutó con 3.14.5 en Windows; sin cambios de dependencias |
 | Docker Engine | 29.1.3 | Con permiso para el usuario |
 | Docker Compose | 2.40.3 | Plugin `docker compose` |
 | LocalStack | **3.8.0** | Imagen Community del Lab-1, **sin token** |
@@ -107,14 +107,15 @@ No se usa volumen persistente: cada `up` arranca limpio. Volver a ejecutar
 
 ```bash
 pytest -m base -q          # apoyo del template: debe quedar verde siempre
-pytest -m pendiente -q     # contratos del template (hoy verdes)
+pytest -m pendiente -q     # sin casos: la marca queda para futuras plantillas
 pytest -m integracion -q   # requiere LocalStack arriba
 pytest -q                  # todo
 ```
 
-Con LocalStack arriba, `pytest -q` deja **102 passed**. Las suites
-`test_contracts.py` y `test_fenix.py` conservan la marca `pendiente` del
-template, pero en `main` ya están implementadas y pasan.
+Con LocalStack arriba, `pytest -q` deja **108 passed**. Las suites
+`test_contracts.py` y `test_fenix.py` ya no llevan la marca `pendiente`: están
+implementadas y pasan. La marca sigue definida en `pyproject.toml` para futuras
+plantillas.
 
 Con el paquete instalado no hace falta `PYTHONPATH=src`. Si se corre sin instalar:
 

@@ -89,3 +89,10 @@ Mismas URLs, mismos IDs de inventario, sin duplicados.
 | F14 | 429/timeout y luego éxito; no repite reparación |
 | F15 | Mismo `event_id` con otro payload -> conflicto |
 | F16 | Log rotado `.gz` leído y parseado como JSON |
+
+## Observabilidad
+
+| ID | Evidencia principal |
+|---|---|
+| O1 | Logs JSON de un evento nominal y de un mensaje corrupto (`O1-log-nominal.jsonl`, `O1-log-fallo.jsonl`) |
+| O2 | Los cinco niveles (`DEBUG` a `CRITICAL`) serializados con timestamp UTC |
