@@ -356,7 +356,18 @@ Link al video: _Completar_
 
 ## 16. Declaración de ayuda externa e IA
 
-_Completar: herramientas/IA utilizadas, qué se generó o modificó, cómo se verificó, y confirmar que cada integrante puede explicar y modificar su código._
+Para el desarrollo se utilizaron asistentes de IA como apoyo para consultas, revisión de código, redacción de pruebas y documentación. Solo I2 utilizó un **Asistente de IA local** (Qwen/Gemma); el resto trabajó con asistentes en la nube. En todos los casos, el código fue leído, adaptado y ejecutado por el integrante responsable de cada módulo. Las pruebas y las salidas de las evidencias se obtuvieron con comandos reales sobre LocalStack y se revisaron manualmente; no se incorporaron resultados sin verificarlos.
+
+| Integrante | Herramientas | Uso principal | Módulos / pruebas | Verificación |
+|---|---|---|---|---|
+| Herrera, Nancy Mariel (I1) | Gemini | Consulta y revisión de reglas de validación; redacción de casos de prueba. | `validation.py`, `events.py`, `test_i1_entradas.py` | `pytest tests/test_i1_entradas.py -q` y revisión manual de rechazos. |
+| Maldonado, Fernando Manuel (I2) | Agente de IA local Qwen, Gemma | Apoyo en la revisión de idempotencia de colas, inventario y backoff. | `sqs.py`, `demo.py`, `test_i2_mensajeria.py` | `pytest tests/test_i2_mensajeria.py -q` con LocalStack; comparación manual de IDs y atributos. |
+| Mamani, Hector Mauricio (I3) | Gemini, ChatGPT | Apoyo en la revisión de HMAC, receptor y clasificación de errores. | `crypto.py`, `receiver.py`, `remediation.py`, `test_i3_webhooks.py` | `pytest tests/test_i3_webhooks.py -q`; pruebas con firmas alteradas y receptor real. |
+| Alegre, Facundo Sebastián (I4) | DeepSeek | Apoyo en la revisión del formato JSON, rotación de logs y reintentos de aviso. | `logging_json.py`, `notifications.py`, `test_i4_observabilidad.py` | `pytest tests/test_i4_observabilidad.py -q`; revisión de logs reales y prueba de 429. |
+| Rodríguez, Hector Fernando (I5) | DeepSeek, GitHub Copilot de VS Code | Apoyo en la revisión del worker, ledger, ACK y reanudación. | `worker.py`, `remediation.py` (`handle`), `cli.py`, `test_i5_worker.py` | `pytest tests/test_i5_worker.py -q`; ejecución manual de `worker --once` y `simulate_failures`. |
+| Gaspar, Lautaro Miguel Angel (I6) | Claude Code, Gemini | Apoyo en la revisión de escenarios, diagnóstico y DLQ. | `tests/`, `demo.py` (`inject_fault`), `test_i6_diagnostico.py`, `test_scenarios.py` | `pytest tests/test_i6_diagnostico.py tests/test_scenarios.py -q`; inyección manual de JSON corrupto y lectura de DLQ. |
+
+Cada integrante revisó su módulo y cuenta con la documentación y las pruebas del repositorio para explicar las decisiones y realizar los cambios solicitados durante la defensa. Las herramientas se utilizaron como apoyo; la implementación final y la ejecución de las pruebas fueron responsabilidad de cada integrante.
 
 ## 17. Estructura del repositorio
 
