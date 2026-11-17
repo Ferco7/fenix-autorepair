@@ -209,9 +209,9 @@ python -m fenix.cli send examples/node-event.json
 | F11 | Repetir evento completo; reiniciar worker | `pytest tests/test_scenarios.py::test_duplicate_is_idempotent tests/test_scenarios.py::test_ack_is_after_success -v` | Sin nueva reparación ni aviso confirmado | `2 passed`; el segundo procesamiento no repara ni avisa; el ACK ocurre solo después del éxito | [`evidence/F11-duplicado-idempotente.md`](evidence/F11-duplicado-idempotente.md) | I6 | 2026-11-14 |
 | F12 | Cortar tras `repair_done` antes de `notify` | `pytest tests/test_scenarios.py::test_restart_after_repair_only_notifies -v` | Reinicio recupera solo aviso pendiente | `1 passed`; con `repair_done` ya registrado, el reinicio solo envía el aviso y no repite la reparación | [`evidence/F12-reinicio-solo-aviso.md`](evidence/F12-reinicio-solo-aviso.md) | I6 | 2026-11-14 |
 | F13 | SQS detenido al recibir webhook | _Completar_ | 503; no aceptación falsa | _Completar_ | _Completar_ | _Completar_ | _Completar_ |
-| F14 | Mock aviso 429/timeout luego éxito | notify con 429 y handle de nuevo | No repite reparación; reintenta aviso | 429 y timeout -> RetryableError; reparación 1 vez; aviso confirmado en el segundo intento | [`evidence/F14-notify-telegram.md`](evidence/F14-notify-telegram.md) | I4 | 2026-11-16 |
+| F14 | Mock aviso 429/timeout luego éxito | `notify` con 429 y `handle` de nuevo | No repite reparación; reintenta aviso | `3 passed`; 429 y timeout → `RetryableError`, reparación 1 vez y aviso confirmado en el reintento; incluye el envío real por Telegram | [`evidence/F14-429-timeout.md`](evidence/F14-429-timeout.md) | I4 | 2026-11-17 |
 | F15 | Cambiar payload conservando `event_id` | `handle` dos veces con distinto contenido | Conflicto; no altera ledger/recursos originales | Conflicto en `_conflicts`; registro original y recursos intactos; sin ACK | `tests/test_i5_worker.py::test_handle_registra_conflicto_sin_cambiar_el_original` | I5 | 2026-11-13 |
-| F16 | Forzar rotación, leer .gz, parsear líneas | RotatingFileHandler reducido con gzip_rotate | JSON válido, UTC, contexto; sin secretos | .jsonl.1.gz con líneas JSON; timestamp UTC y solo campos autorizados | [`evidence/F16-rotacion-gzip.md`](evidence/F16-rotacion-gzip.md) | I4 | 2026-11-16 |
+| F16 | Forzar rotación, leer `.gz`, parsear líneas | `RotatingFileHandler` reducido con `gzip_rotate` | JSON válido, UTC, contexto; sin secretos | `1 passed`; `.jsonl.1.gz` adjunto (4 líneas) con timestamp UTC y solo campos autorizados | [`evidence/F16-rotacion-gzip.md`](evidence/F16-rotacion-gzip.md) | I4 | 2026-11-17 |
 
 > Automáticas sugeridas: F04,F05,F06,F07,F09,F11/F12,F16. Integración LocalStack: F01,F02,F03,F08,F10,F13.
 >
@@ -237,10 +237,10 @@ python -m fenix.cli send examples/node-event.json
 
 **Evidencia de envío real (I4 - Alegre, Facundo Sebastián):**
 
-- Estado: **Pendiente de captura**.
+- Estado: **Enviado** el 2026-11-16.
 - El código de `notify` está implementado y probado con mocks (26 tests passed en `tests/test_i4_observabilidad.py`).
-- Se realizará el envío real a Telegram con credenciales propias y se adjuntará la captura anonimizada en `docs/images/evidencia-telegram-i4.png` antes de la entrega final.
-- Comando previsto (carga `.env` explícitamente porque `notifications.py` no lo hace solo):
+- Captura anonimizada: [`docs/images/evidencia-telegram-i4.png`](docs/images/evidencia-telegram-i4.png); recortada para excluir chats de terceros y con el token de la URL y el identificador del chat tapados.
+- Comando usado (carga `.env` explícitamente porque `notifications.py` no lo hace solo):
   ```bash
   set -a
   source .env
