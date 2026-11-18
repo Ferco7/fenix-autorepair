@@ -2,7 +2,7 @@
 
 Sistema que recibe una alerta de laboratorio mediante un **webhook autenticado**, la guarda en **SQS**, repara un recurso emulado por **Boto3/LocalStack** y comunica el resultado a **Telegram o Slack**.
 
-> Estado: **sistema completo e integrado**. La suite da **108 passed** con LocalStack y el CI está en verde. La matriz F01–F16 está cerrada; quedan el video, la declaración de IA y la verificación desde un clon limpio.
+> Estado: **sistema completo e integrado**. La suite da **108 passed** con LocalStack y el CI está en verde. La matriz F01–F16 está cerrada y la verificación desde un clon limpio está documentada; solo queda el video.
 
 ## 1. Objetivo del sistema
 
@@ -62,6 +62,7 @@ python scripts/check_localstack.py
 
 - `scripts/doctor.py` comprueba Python, `.env`, variables obligatorias, destino loopback, imagen, Docker/Compose y salud del emulador. **No imprime secretos.**
 - `scripts/check_localstack.py` valida SQS + DLQ, S3 con tags y EC2 mock (`stop`/`start`) contra LocalStack real.
+- La verificación desde un clon limpio está en [`evidence/clon-limpio.md`](evidence/clon-limpio.md): instalación, `doctor.py` y suite completa.
 - Las versiones efectivas están fijadas en `requirements-lock.txt` (generado con `pip freeze --exclude-editable`). No editarlo a mano.
 - Para reinstalar exactamente lo probado: `python -m pip install -r requirements-lock.txt`.
 

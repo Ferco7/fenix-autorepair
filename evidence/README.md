@@ -96,3 +96,9 @@ Mismas URLs, mismos IDs de inventario, sin duplicados.
 |---|---|
 | O1 | Logs JSON de un evento nominal y de un mensaje corrupto (`O1-log-nominal.jsonl`, `O1-log-fallo.jsonl`) |
 | O2 | Los cinco niveles (`DEBUG` a `CRITICAL`) serializados con timestamp UTC |
+
+## Verificación de entorno
+
+| Caso | Evidencia principal |
+|---|---|
+| Clon limpio | Instalación desde GitHub, `doctor.py` y suite completa en [`clon-limpio.md`](clon-limpio.md) |

@@ -107,6 +107,6 @@ y demostrar el efecto.
       durante la defensa, mostrar la evidencia previa y el adaptador con un mock.
 - [x] Logs JSON y un archivo rotado `.gz` leído correctamente.
 - [x] Matriz F01–F16 del README completa.
-- [ ] Verificación desde un clon limpio: instalación, `doctor.py` y suite completa.
+- [x] Verificación desde un clon limpio: instalación, `doctor.py` y suite completa.
 - [ ] Video con marca de tiempo por integrante.
-- [ ] Declaración de IA completa.
+- [x] Declaración de IA completa.
