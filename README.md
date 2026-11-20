@@ -350,7 +350,7 @@ Orden importante:
 | Maldonado, Fernando Manuel (I2) | 00:00 | _Completar_ |
 | Mamani, Hector Mauricio (I3) | 00:00 | _Completar_ |
 | Alegre, Facundo Sebastián (I4) | 00:00 | _Completar_ |
-| Rodríguez, Hector Fernando (I5) | 00:00 | _Completar_ |
+| Rodríguez, Hector Fernando (I5) | 11:43 |https://youtu.be/mQ3Z7mFoTX8?si=cQj5yWe44dJ9vHv1 |
 | Gaspar Lautaro Miguel Angel (I6) | 00:00 | _Completar_ |
 
 Link al video: _Completar_
