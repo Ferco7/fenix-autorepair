@@ -1,4 +1,4 @@
-"""Mensajería a completar por el integrante 2; colas estándar, no FIFO."""
+"""Mensajería SQS del proyecto Fénix: colas estándar con DLQ y backoff."""
 import json  # Convierte eventos y políticas a texto JSON.
 from fenix.config.settings import client  # Garantiza el endpoint local.
 
@@ -12,11 +12,12 @@ def ensure_queues(prefix: str) -> tuple[str, str]:
         Tupla (work_url, dlq_url), tomada de las respuestas de Boto3.
     Raises:
         ClientError: Si SQS rechaza una operación; la CLI lo registra.
-        NotImplementedError: Mientras falte TODO I2-A.
     Side Effects:
         Crea dos colas y actualiza RedrivePolicy en la cola principal.
     Notes:
-        Repetir con la misma configuración conserva ambas colas.
+        Repetir con la misma configuración conserva ambas colas. Cambiar los
+        atributos de una cola existente requiere un prefijo nuevo: SQS rechaza
+        `create_queue` con `QueueNameExists` antes de reconciliar la política.
     """
     sqs = client("sqs")  # Construye el cliente una vez en esta operación.
     dead = sqs.create_queue(QueueName=f"{prefix}-dlq", Attributes={
@@ -65,6 +66,9 @@ def publish(url: str, event: dict, delay: int = 0) -> str:
         ClientError: Si falla el envío a SQS.
     Side Effects:
         Añade un mensaje a una cola estándar; puede haber entregas repetidas.
+    Notes:
+        Adjunta EventId como MessageAttribute para correlación. El MessageId
+        devuelto identifica el mensaje SQS, no la operación de negocio.
     """
     if not 0 <= delay <= 900:  # No confundir con VisibilityTimeout.
         raise ValueError("DelaySeconds debe estar entre 0 y 900")  # Falla antes del SDK.
@@ -87,6 +91,10 @@ def receive(url: str) -> list[dict]:
         ClientError: Si SQS no responde; el bucle externo decide cómo continuar.
     Side Effects:
         Incrementa la recepción y oculta temporalmente el mensaje obtenido.
+    Notes:
+        Devuelve el mensaje crudo (Body, ReceiptHandle y Attributes). El worker
+        interpreta el Body y valida el contrato; un JSON inválido se conserva
+        para la DLQ y no termina el proceso.
     """
     response = client("sqs").receive_message(  # La espera evita polling intensivo.
         QueueUrl=url, MaxNumberOfMessages=1, WaitTimeSeconds=10,
@@ -123,9 +131,11 @@ def retry_later(url: str, message: dict) -> int:
         Segundos asignados: min(30, 2 ** número_de_recepción).
     Raises:
         ClientError: Si no se pudo cambiar la visibilidad.
-        NotImplementedError: Mientras falte TODO I2-B.
     Side Effects:
         Cambia la visibilidad; RedrivePolicy sigue controlando la DLQ.
+    Notes:
+        Si el contador de recepción no es un entero, se usa 1 para no tumbar
+        al worker; el mensaje se reprograma con 2 segundos.
     """
     try:
         count = int(message["Attributes"]["ApproximateReceiveCount"])  # Cuenta de SQS.
