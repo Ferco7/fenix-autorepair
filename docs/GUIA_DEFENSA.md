@@ -2,9 +2,10 @@
 
 ## 1. Formato
 
-- Video grupal de **30 a 40 minutos**.
+- Video grupal de **30 a 40 minutos** como referencia. El video entregado dura
+  **49:40**: https://youtu.be/nNQpBC0sgQI
 - **5 a 7 minutos por integrante**, en el orden de dependencias:
-  I1 → I2 → I3 → I5 → I4 → I6.
+  I1 → I2 → I3 → I4 → I5 → I6. Las marcas de tiempo están en el README (§15).
 - Cada bloque debe mostrar: contexto, módulo, demo en vivo, **modificación en
   vivo** y pruebas que defiende.
 
@@ -108,5 +109,6 @@ y demostrar el efecto.
 - [x] Logs JSON y un archivo rotado `.gz` leído correctamente.
 - [x] Matriz F01–F16 del README completa.
 - [x] Verificación desde un clon limpio: instalación, `doctor.py` y suite completa.
-- [ ] Video con marca de tiempo por integrante.
+- [x] Video con marca de tiempo por integrante:
+      https://youtu.be/nNQpBC0sgQI
 - [x] Declaración de IA completa.
