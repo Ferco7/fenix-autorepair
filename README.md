@@ -346,14 +346,14 @@ Orden importante:
 
 | Integrante | Marca de tiempo | Contenido |
 |---|---|---|
-| Herrera Nancy Mariel (I1) | 00:00 | _Completar_ |
-| Maldonado, Fernando Manuel (I2) | 00:00 | _Completar_ |
-| Mamani, Hector Mauricio (I3) | 00:00 | _Completar_ |
-| Alegre, Facundo Sebastián (I4) | 00:00 | _Completar_ |
-| Rodríguez, Hector Fernando (I5) | 00:00 | _Completar_ |
-| Gaspar Lautaro Miguel Angel (I6) | 00:00 | _Completar_ |
+| Herrera Nancy Mariel (I1) | 00:00 | Entradas y excepciones: validación y rechazo de entradas |
+| Maldonado, Fernando Manuel (I2) | 07:25 | Mensajería e inventario cloud: colas, DLQ e idempotencia |
+| Mamani, Hector Mauricio (I3) | 20:21 | Webhooks y reparación: HMAC y verificación |
+| Alegre, Facundo Sebastián (I4) | 28:40 | Observabilidad y comunicación: logs y avisos |
+| Rodríguez, Hector Fernando (I5) | 34:09 | Integración y worker: ACK, ledger y reanudación |
+| Gaspar Lautaro Miguel Angel (I6) | 45:51 | Pruebas y diagnóstico: escenarios e inject_fault |
 
-Link al video: _Completar_
+Link al video: https://youtu.be/nNQpBC0sgQI
 
 ## 16. Declaración de ayuda externa e IA
 
